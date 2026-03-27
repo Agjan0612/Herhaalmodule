@@ -187,7 +187,10 @@ tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(255,255,255,.02
 .search-inp::placeholder{color:var(--muted);}
 select{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:5px 8px;color:var(--text);font-size:12px;cursor:pointer;outline:none;font-family:var(--sans);}
 
-/* ── Empty ── */
+/* ── Huisarts combobox dropdown ── */
+.ha-item{padding:7px 12px;font-size:12px;cursor:pointer;color:var(--dim);white-space:nowrap;}
+.ha-item:hover,.ha-item.ha-active{background:var(--s2);color:var(--text);}
+
 .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:50px 20px;gap:10px;}
 .empty-ico{font-size:34px;opacity:.35;}
 .empty-ttl{font-size:13px;color:var(--dim);font-weight:500;}
@@ -435,9 +438,18 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
           <option value="pid">Sorteren: patiëntnummer</option>
           <option value="aanb">Sorteren: # aanbevolen</option>
         </select>
-        <select id="filterHuisarts" onchange="filterPats('')" style="display:none">
-          <option value="">👨‍⚕️ Alle huisartsen</option>
-        </select>
+        <!-- Doorzoekbare huisarts combobox -->
+        <div id="huisartsCombo" style="display:none;position:relative;">
+          <input id="huisartsInput" class="search-inp" placeholder="👨‍⚕️ Huisarts zoeken..." autocomplete="off"
+            oninput="onHuisartsInput()"
+            onfocus="openHuisartsDropdown()"
+            onblur="setTimeout(closeHuisartsDropdown,150)"
+            onkeydown="onHuisartsKey(event)"
+            style="width:160px">
+          <div id="huisartsDropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;min-width:160px;background:var(--surf);border:1px solid var(--border);border-radius:6px;z-index:300;max-height:200px;overflow-y:auto;box-shadow:0 6px 20px rgba(0,0,0,.4)"></div>
+        </div>
+        <!-- Hidden value holder (replaces the old select) -->
+        <input type="hidden" id="filterHuisarts" value="">
       </div>
       <div class="toolbar-right">
         <span id="selCount" style="font-size:11px;color:var(--muted)">0 geselecteerd</span>
@@ -922,15 +934,68 @@ function renderAll(){
 // ═══════════════════════════════════════════
 // PATIËNTENLIJST
 // ═══════════════════════════════════════════
+// ── Huisarts combobox state ──
+let huisartsAll=[];  // alle unieke waarden uit data
+
 function buildHuisartsDropdown(){
-  const sel=document.getElementById('filterHuisarts');
-  if(!sel)return;
+  const combo=document.getElementById('huisartsCombo');
+  if(!combo)return;
   const haSet=new Set();
   rawRows.forEach(r=>{const ha=(r[C.huisarts]||'').trim();if(ha&&ha!=='0')haSet.add(ha);});
-  const current=sel.value;
-  sel.innerHTML='<option value="">👨‍⚕️ Alle huisartsen</option>'+[...haSet].sort().map(ha=>`<option value="${ha}">${ha}</option>`).join('');
-  if(haSet.has(current))sel.value=current;
-  sel.style.display=haSet.size>0?'':'none';
+  huisartsAll=[...haSet].sort();
+  // Als er geen huisartsen zijn, verberg de combo
+  combo.style.display=huisartsAll.length>0?'':'none';
+  // Reset selectie als de huidige waarde niet meer bestaat
+  const cur=document.getElementById('filterHuisarts').value;
+  if(cur&&!haSet.has(cur))setHuisarts('');
+}
+
+function renderHuisartsItems(filter=''){
+  const dd=document.getElementById('huisartsDropdown');
+  const q=filter.toLowerCase();
+  const matches=huisartsAll.filter(h=>!q||h.toLowerCase().includes(q));
+  const cur=document.getElementById('filterHuisarts').value;
+  dd.innerHTML=[
+    `<div class="ha-item${cur===''?' ha-active':''}" onmousedown="setHuisarts('')">Alle huisartsen</div>`,
+    ...matches.map(h=>`<div class="ha-item${cur===h?' ha-active':''}" onmousedown="setHuisarts('${h}')">${h}</div>`)
+  ].join('');
+  if(!matches.length&&q)dd.innerHTML='<div style="padding:7px 12px;font-size:11px;color:var(--muted)">Geen resultaten</div>';
+}
+
+function openHuisartsDropdown(){
+  const dd=document.getElementById('huisartsDropdown');
+  renderHuisartsItems(document.getElementById('huisartsInput').value);
+  dd.style.display='block';
+}
+
+function closeHuisartsDropdown(){
+  document.getElementById('huisartsDropdown').style.display='none';
+  // Als input leeg is, reset filter; anders herstel label
+  const cur=document.getElementById('filterHuisarts').value;
+  document.getElementById('huisartsInput').value=cur||'';
+}
+
+function onHuisartsInput(){
+  renderHuisartsItems(document.getElementById('huisartsInput').value);
+  document.getElementById('huisartsDropdown').style.display='block';
+}
+
+function onHuisartsKey(e){
+  const dd=document.getElementById('huisartsDropdown');
+  const items=dd.querySelectorAll('.ha-item');
+  const active=dd.querySelector('.ha-active');
+  let idx=[...items].indexOf(active);
+  if(e.key==='ArrowDown'){e.preventDefault();idx=Math.min(idx+1,items.length-1);items.forEach((el,i)=>el.classList.toggle('ha-active',i===idx));}
+  else if(e.key==='ArrowUp'){e.preventDefault();idx=Math.max(idx-1,0);items.forEach((el,i)=>el.classList.toggle('ha-active',i===idx));}
+  else if(e.key==='Enter'){e.preventDefault();if(items[idx])items[idx].dispatchEvent(new MouseEvent('mousedown'));}
+  else if(e.key==='Escape'){closeHuisartsDropdown();}
+}
+
+function setHuisarts(val){
+  document.getElementById('filterHuisarts').value=val;
+  document.getElementById('huisartsInput').value=val||'';
+  document.getElementById('huisartsDropdown').style.display='none';
+  filterPats('');
 }
 
 let patSumms=[];
@@ -1482,8 +1547,8 @@ function switchTab(id,el){
   document.getElementById('patSearch').style.display=isKand?'':'none';
   document.getElementById('filterKand').style.display=isKand?'':'none';
   document.getElementById('sortPat').style.display=isKand?'':'none';
-  const haEl=document.getElementById('filterHuisarts');
-  if(haEl)haEl.style.display=isKand&&haEl.options.length>1?'':'none';
+  const combo=document.getElementById('huisartsCombo');
+  if(combo)combo.style.display=isKand&&huisartsAll.length>0?'':'none';
 }
 
 function statusBadge(s){const m={'Aanbevolen':'bg ✅','Overwegen':'ba ⚠️','Uitgesloten':'br ❌','Wisselende dosering':'ba ~'};const[c,...r]=(m[s]||'bgr '+s).split(' ');return`<span class="badge ${c}">${r.join(' ')||s}</span>`;}
