@@ -438,7 +438,7 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
       <div id="atcToggles" style="display:flex;flex-direction:column;gap:1px;max-height:160px;overflow-y:auto">
         <span style="font-size:11px;color:var(--muted)">Laad data</span>
       </div>
-      <div class="sec-title" style="margin-top:10px">Extra geneesmiddelen</div>
+      <div class="sec-title" style="margin-top:10px">Extra geneesmiddelen (whitelist)</div>
       <div style="display:flex;gap:4px;margin-bottom:5px">
         <input id="extraMedInput" class="search-inp" placeholder="Naam of ATC..." style="flex:1;font-size:11px"
           oninput="searchExtraMed()" onkeydown="if(event.key==='Enter')addExtraMed()">
@@ -446,6 +446,22 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
       </div>
       <div id="extraMedSuggest" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:6px;margin-bottom:5px;max-height:100px;overflow-y:auto"></div>
       <div id="extraMedTags" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px"></div>
+
+      <div class="sec-title" style="margin-top:10px">Handmatige exclusies</div>
+      <div style="display:flex;gap:4px;margin-bottom:5px">
+        <input id="exclusieInput" class="search-inp" placeholder="Naam of ATC uitsluiten..." style="flex:1;font-size:11px"
+          oninput="searchExclusieMed()" onkeydown="if(event.key==='Enter')addExclusieMed()">
+        <button class="btn btn-amber btn-xs" onclick="addExclusieMed()">−</button>
+      </div>
+      <div id="exclusieSuggest" style="display:none;background:var(--s2);border:1px solid var(--border);border-radius:6px;margin-bottom:5px;max-height:100px;overflow-y:auto"></div>
+      <div id="exclusieTags" style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:4px"></div>
+
+      <div class="sec-title" style="margin-top:10px">Inactiviteitsdrempel</div>
+      <div class="cr-row">
+        <div class="cr-top"><span class="cr-lbl">Max. dagen inactief</span><span class="cr-val" id="vInactief">90</span></div>
+        <input type="range" min="30" max="365" value="90" step="30" id="sInactief" oninput="document.getElementById('vInactief').textContent=this.value;debouncedReanalyse()">
+        <div style="font-size:10px;color:var(--muted);margin-top:2px">Patiënten waarbij de laatste verstrekking ouder is dan dit aantal dagen worden uitgesloten</div>
+      </div>
     </div>
 
     </div><!-- /geavanceerd-inner -->
@@ -455,7 +471,7 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
         <div class="sec-title">Beveiliging</div>
         <button class="btn btn-ghost btn-xs" style="width:100%;justify-content:center" onclick="showWachtwoordWijzigen()">🔑 Wachtwoord wijzigen</button>
       </div>
-      <div class="info-box"><strong>Automatisch uitgesloten:</strong><br>· DistHerPatient ≠ N (Baxter/HS patiënten)<br>· ReceptHerkomst = D (Baxterrol-verstrekkingen)<br>· Dosering "zo nodig" (ZN in doseringscode)<br>· Opiaten (N02A), stimulantia (N06BA), benzo's (N05B/C), antipsychotica (N05A), methadon/buprenorfine (N07BC), cytostatica, immunosuppressiva</div>
+      <div class="info-box"><strong>Automatisch uitgesloten:</strong><br>· DistHerPatient ≠ N (Baxter/HS patiënten)<br>· ReceptHerkomst = D (Baxterrol-verstrekkingen)<br>· Dosering "zo nodig" (ZN in doseringscode)<br>· Variabele dosering (bereik, bijv. 1-2D, 3-6D)<br>· Opiaten (N02A), stimulantia (N06BA), benzo's (N05B/C), antipsychotica (N05A), methadon/buprenorfine (N07BC), cytostatica, immunosuppressiva</div>
       <div class="warn-box"><strong>⚠️ Privacy:</strong> alle verwerking lokaal in de browser.</div>
     </div>
   </div>
@@ -814,6 +830,7 @@ function isWhitelisted(atc){
 // STATE
 // ═══════════════════════════════════════════
 let rawRows=[], analysis=[], charts={}, atcEnabled={};
+let _analyseWorker=null, _workerBusy=false, _pendingAnalyse=null;
 let cachedPatSumm=[];  // cache voor buildPatSumm()
 let dirtyTabs={meds:true,grafieken:true,huisartsen:true,afgehandeld:true};  // lazy render vlaggen
 let activeTab='kandidaten';
@@ -1083,7 +1100,7 @@ function resetWhitelist(){
 // ═══════════════════════════════════════════
 // ANALYSE
 // ═══════════════════════════════════════════
-function getCrit(){return{minM:+document.getElementById('sMonths').value,minP:+document.getElementById('sPresc').value,margin:+document.getElementById('sMargin').value,reqF:document.getElementById('togDose').checked,onlyVU:document.getElementById('togVU').checked,exclOZ:document.getElementById('togExcl').checked};}
+function getCrit(){return{minM:+document.getElementById('sMonths').value,minP:+document.getElementById('sPresc').value,margin:+document.getElementById('sMargin').value,reqF:document.getElementById('togDose').checked,onlyVU:document.getElementById('togVU').checked,exclOZ:document.getElementById('togExcl').checked,maxInactief:+(document.getElementById('sInactief')?.value||90)};}
 // ── Lazy render helper ──
 function renderDirtyTab(tab){
   if(tab==='meds'&&dirtyTabs.meds){renderMedsTable();dirtyTabs.meds=false;}
@@ -1096,18 +1113,122 @@ function reanalyse(){if(rawRows.length)runAnalysis();}
 
 function runAnalysis(){
   const c=getCrit();
+  const worker=getWorker();
+  if(!worker){
+    // Geen worker beschikbaar — gebruik synchrone fallback
+    runAnalysisSync();
+    return;
+  }
   const doRun=()=>{
     if(_workerBusy){_pendingAnalyse=doRun;return;}
     _workerBusy=true;
     document.getElementById('analyseLoader').style.display='flex';
-    getWorker().postMessage({
+    worker.postMessage({
       rawRows,
       crit:c,
       atcEnabled,
-      extraWhitelistMeds:[...extraWhitelistMeds]
+      extraWhitelistMeds:[...extraWhitelistMeds],
+      exclusieMeds:[...exclusieMeds]
     });
   };
   doRun();
+}
+
+function runAnalysisSync(){
+  // Synchrone fallback analyse (zonder Web Worker)
+  const c=getCrit();
+  const exclusieSet=new Set([...exclusieMeds].map(s=>s.toLowerCase()));
+  const extraSet=new Set([...extraWhitelistMeds]);
+  const maxInactief=c.maxInactief||90;
+
+  // Peildatum
+  let peilTs=0;
+  rawRows.forEach(r=>{const d=r[C.datum];if(d){const t=new Date(d).getTime();if(t>peilTs)peilTs=t;}});
+  const peilDatum=peilTs?new Date(peilTs):new Date();
+
+  // Laatste verstrekking per patiënt
+  const patLaatst={};
+  rawRows.forEach(r=>{
+    const pid=(r[C.pid]||'').trim(),datum=r[C.datum];
+    if(pid&&datum){const t=new Date(datum).getTime();if(!patLaatst[pid]||t>patLaatst[pid])patLaatst[pid]=t;}
+  });
+
+  function extractSterkte(naam){
+    const m=(naam||'').toUpperCase().match(/(\d+(?:[,.]\d+)?)\s*(MCG|MG|G|ML|IE|MMOL|%)/);
+    return m?m[1].replace(',','.')+m[2]:'';
+  }
+  function isUitgesloten(atc,naam){
+    const naamL=(naam||'').toLowerCase(),atcU=(atc||'').toUpperCase();
+    for(const k of exclusieSet){if(naamL.includes(k)||atcU.startsWith(k.toUpperCase()))return true;}
+    return false;
+  }
+  function isWLorExtraSync(atc,naam){
+    if(isWhitelisted(atc)&&!isBlacklisted(atc))return true;
+    return extraSet.has((naam||'').toLowerCase());
+  }
+  function calcContinuousMonths(dates){
+    if(dates.length<2)return 0;
+    let episodeStart=new Date(dates[0]);
+    for(let i=1;i<dates.length;i++){
+      const gap=Math.round((new Date(dates[i])-new Date(dates[i-1]))/864e5);
+      if(gap>180)episodeStart=new Date(dates[i]);
+    }
+    return Math.round((new Date(dates[dates.length-1])-episodeStart)/(864e5*30));
+  }
+
+  const grps={};
+  rawRows.forEach(r=>{
+    const pid=(r[C.pid]||'').trim(),atc=(r[C.atc]||'').trim(),naam=(r[C.naam]||'').trim();
+    const dist=(r[C.dist]||'').trim(),herk=(r[C.herk]||'').trim(),uitg=(r[C.uitg]||'').trim();
+    const dkode=(r[C.dkode]||'').trim(),datum=(r[C.datum]||'').trim(),aantal=parseInt(r[C.aantal]||'0')||0;
+    if(!atc||atc==='0'||!naam||!pid)return;
+    if(dist!=='N')return;
+    if(herk==='D')return;
+    if(isBlacklisted(atc))return;
+    if(isUitgesloten(atc,naam))return;
+    const dkodeUpper=dkode.toUpperCase(),omschrUpper=(r[9]||'').toUpperCase();
+    if(/ZN/.test(dkodeUpper)||omschrUpper.includes('ZO NODIG')||omschrUpper.includes('INDIEN NODIG'))return;
+    if(/^\d+-\d+[DW]/i.test(dkode))return;
+    if(c.exclOZ&&(herk==='Z'||uitg==='ONB'))return;
+    const a3=atc.slice(0,3).toUpperCase();
+    if(atcEnabled[a3]===false)return;
+    const patTs=patLaatst[pid]||0;
+    if(Math.round((peilDatum.getTime()-patTs)/864e5)>maxInactief)return;
+    const sterkte=extractSterkte(naam);
+    const key=pid+'|'+atc+'|'+sterkte;
+    if(!grps[key])grps[key]={pid,atc,naam,sterkte,namen:new Set(),dkodes:[],entries:[]};
+    grps[key].namen.add(naam);
+    if(!grps[key].dkodes.includes(dkode))grps[key].dkodes.push(dkode);
+    if(datum)grps[key].entries.push({date:new Date(datum),datum,aantal,uitg,herk});
+  });
+
+  analysis=Object.values(grps).map(g=>{
+    g.entries.sort((a,b)=>a.date-b.date);
+    const dates=g.entries.map(e=>e.date);
+    const aantallen=g.entries.map(e=>e.aantal);
+    const naamFreq={};g.namen.forEach(n=>{naamFreq[n]=(naamFreq[n]||0)+1;});
+    const weergaveNaam=Object.entries(naamFreq).sort((a,b)=>b[1]-a[1])[0]?.[0]||g.naam;
+    const aantalMerken=g.namen.size;
+    const months=calcContinuousMonths(dates.map(d=>d.toISOString().slice(0,10)));
+    const fixedDose=new Set(g.dkodes).size<=1;
+    const count=g.entries.length;
+    const mainDkode=g.dkodes.filter(d=>d&&d.length>1&&!/^\d{4}-\d{2}/.test(d))[0]||'';
+    const daily=parseDailyDose(mainDkode);
+    const adh=calcAdherence(dates,aantallen,mainDkode,c.margin);
+    const atcGrp=ATC_N[g.atc[0]?.toUpperCase()]||g.atc[0]?.toUpperCase()||'';
+    const isWL=isWLorExtraSync(g.atc,weergaveNaam);
+    const score=calcScore(count,months,fixedDose,adh.pct,!!mainDkode,c,isWL);
+    const status=calcStatus(count,months,fixedDose,c,score);
+    const herkM=g.entries.reduce((a,e)=>{a[e.herk]=(a[e.herk]||0)+1;return a},{});
+    const topHerk=Object.entries(herkM).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+    const lastDate=dates[dates.length-1];
+    const reden=redenAfwijzing(count,months,fixedDose,c,status);
+    const duurSignaal=months>=12?'stabiel':months<=1?'kort':'';
+    return{...g,naam:weergaveNaam,aantalMerken,months,fixedDose,count,mainDkode,daily,adh,atcGrp,score,status,reden,duurSignaal,topHerk,dates,aantallen,isWL,lastDate,entries:g.entries};
+  }).filter(m=>m.naam);
+
+  cachedPatSumm=buildPatSumm();
+  renderAll();
 }
 
 function calcScore(count,months,fixed,adhPct,hasDose,c,isWL){
@@ -1368,20 +1489,37 @@ function renderPatList(search=''){
     const redenTip=p.kandidaat==='niet'&&p.redenen&&p.redenen.length>0?p.redenen[0]:'';
     const polyBadge=p.aanb>=5?'<span class="badge bb" style="font-size:9px" title="Polyfarmacie: '+p.aanb+' medicijnen — hoge prioriteit">💊 '+p.aanb+' medicijnen</span>':p.aanb>=3?'<span class="badge" style="font-size:9px;background:rgba(16,185,129,.1);color:var(--green);border:1px solid rgba(16,185,129,.3)">'+p.aanb+' medicijnen</span>':'';
     const kBadge=p.kandidaat==='sterk'?'<span class="badge bg" style="font-size:9px">✅ Geschikt</span>':p.kandidaat==='mogelijk'?'<span class="badge ba" style="font-size:9px">⚠️ Mogelijk geschikt</span>':'<span class="badge bgr" style="font-size:9px" title="'+redenTip+'">Nog niet geschikt</span>';
-    const aanbNamen=p.meds.filter(m=>m.status==='Aanbevolen').map(m=>m.naam.split(' ')[0]).slice(0,3).join(', ');
     const lastD=p.lastDate?p.lastDate.toISOString().slice(0,10):'';
+    // Medicijn-chips met therapietrouw, gesorteerd hoog→laag, max 4
+    const aanbMeds=p.meds.filter(m=>m.status==='Aanbevolen'||m.status==='Overwegen')
+      .sort((a,b)=>(b.adh.pct??-1)-(a.adh.pct??-1)).slice(0,4);
+    const medChips=aanbMeds.map(m=>{
+      const pct=m.adh.pct;
+      const col=pct===null?'var(--muted)':pct>=80?'var(--green)':pct>=60?'var(--amber)':'var(--red)';
+      const bg=pct===null?'rgba(100,116,139,.08)':pct>=80?'rgba(5,150,105,.08)':pct>=60?'rgba(217,119,6,.08)':'rgba(220,38,38,.08)';
+      const border=pct===null?'rgba(100,116,139,.2)':pct>=80?'rgba(5,150,105,.25)':pct>=60?'rgba(217,119,6,.25)':'rgba(220,38,38,.25)';
+      const kort=m.naam.split(' ').slice(0,2).join(' ');
+      const pctStr=pct!==null?pct+'%':'—';
+      const isOverw=m.status==='Overwegen';
+      return '<span style="display:inline-flex;align-items:center;gap:3px;background:'+bg+';border:1px solid '+border+';border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">'
+        +(isOverw?'<span style="color:var(--amber);font-size:9px">⚠</span>':'')
+        +'<span style="color:var(--text)">'+kort+'</span>'
+        +'<span style="font-family:var(--mono);font-weight:600;color:'+col+'">'+pctStr+'</span>'
+        +'</span>';
+    }).join('');
     return`<div class="pat-item${isActive?' active':''}${isDone?' done':''}" id="pi-${p.pid}" onclick="showDetail('${p.pid}')">
       <input type="checkbox" class="pat-cb" ${isSel?'checked':''} onclick="toggleSel(event,'${p.pid}')" title="Selecteer voor kopiëren">
       <div class="pat-main">
         <div class="pat-num">${p.pid} ${kBadge} ${polyBadge}${notes[p.pid]?'<span style="font-size:11px;margin-left:4px" title="Notitie aanwezig">📝</span>':''}</div>
-        <div class="pat-sub">
-          <span>${p.aanb} aanb. · ${p.meds.length} totaal</span>
-          ${aanbNamen?`<span style="color:var(--dim)">${aanbNamen}</span>`:''}
-          ${lastD?`<span>📅 ${lastD}</span>`:''}
-          ${p.huisarts?`<span style="color:var(--muted)">🧑‍⚕️ ${p.huisarts}</span>`:''}
-          ${p.kandidaat==='niet'&&redenTip?`<span style="color:var(--red);font-size:10px">${redenTip}</span>`:''}
-          ${p.oudeData&&p.kandidaat!=='niet'?`<span style="color:var(--amber);font-size:10px">⚠ Laatste verstrekking ${p.dagsSindsLaatst} dagen geleden</span>`:''}
-          ${p.dubbelTherapie&&p.dubbelTherapie.length>0?'<span style="color:var(--purple);font-size:10px">⚠ Mogelijk dubbele therapie ('+p.dubbelTherapie.length+' groep'+( p.dubbelTherapie.length>1?'en':'')+')</span>':''}
+        <div class="pat-sub" style="flex-direction:column;align-items:flex-start;gap:3px">
+          ${medChips?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:1px">${medChips}</div>`:''}
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            ${lastD?`<span>📅 ${lastD}</span>`:''}
+            ${p.huisarts?`<span style="color:var(--muted)">🧑‍⚕️ ${p.huisarts}</span>`:''}
+            ${p.kandidaat==='niet'&&redenTip?`<span style="color:var(--red);font-size:10px">${redenTip}</span>`:''}
+            ${p.oudeData&&p.kandidaat!=='niet'?`<span style="color:var(--amber);font-size:10px">⚠ ${p.dagsSindsLaatst}d geleden</span>`:''}
+            ${p.dubbelTherapie&&p.dubbelTherapie.length>0?'<span style="color:var(--purple);font-size:10px">⚠ Dubbele therapie</span>':''}
+          </div>
         </div>
       </div>
       <div class="pat-right">
@@ -1751,7 +1889,7 @@ function showDetail(pid){
   const tableRows=meds.map(m=>{
     const ac=m.adh.pct===null?'var(--muted)':m.adh.pct>=80?'var(--green)':m.adh.pct>=60?'var(--amber)':'var(--red)';
     return`<tr>
-      <td>${m.isWL?'<span class="badge bg" style="font-size:9px">WL</span> ':''}<span style="font-weight:500">${m.naam}</span></td>
+      <td>${m.isWL?'<span class="badge bg" style="font-size:9px">WL</span> ':''}<span style="font-weight:500">${m.naam}</span>${m.aantalMerken>1?' <span class="badge bb" style="font-size:9px" title="'+m.aantalMerken+' merken samengevoegd">'+m.aantalMerken+' merken</span>':''}</td>
       <td><span class="badge bb" style="font-size:9px">${m.atc}</span></td>
       <td style="color:var(--muted);font-size:11px">${m.atcGrp}</td>
       <td style="font-family:var(--mono)">${m.count}×</td>
@@ -1927,7 +2065,7 @@ function renderMedsTable(s=''){
     const ac=m.adh.pct===null?'var(--muted)':m.adh.pct>=80?'var(--green)':m.adh.pct>=60?'var(--amber)':'var(--red)';
     return`<tr>
       <td><span style="font-family:var(--mono);font-weight:600">${m.pid}</span></td>
-      <td>${m.isWL?'<span class="badge bg" style="font-size:9px">WL</span> ':''}<span style="font-weight:500">${m.naam}</span></td>
+      <td>${m.isWL?'<span class="badge bg" style="font-size:9px">WL</span> ':''}<span style="font-weight:500">${m.naam}</span>${m.aantalMerken>1?' <span class="badge bb" style="font-size:9px" title="'+m.aantalMerken+' merken samengevoegd">'+m.aantalMerken+' merken</span>':''}</td>
       <td><span class="badge bb" style="font-size:9px">${m.atc}</span></td>
       <td style="font-size:11px;color:var(--muted)">${m.atcGrp}</td>
       <td style="font-family:var(--mono)">${m.count}×</td>
@@ -2065,6 +2203,7 @@ function exportXLSX(onlyDone=false,onlyFiltered=false,onlySel=false){
 // EXTRA GENEESMIDDELEN WHITELIST
 // ═══════════════════════════════════════════
 let extraWhitelistMeds=new Set(); // namen van extra toegevoegde middelen (lowercase match)
+let exclusieMeds=new Set(); // handmatig uitgesloten middelen (lowercase match)
 
 function searchExtraMed(){
   const q=(document.getElementById('extraMedInput').value||'').toLowerCase().trim();
@@ -2134,6 +2273,79 @@ function isWhitelistedOrExtra(atc, naam){
   if(_origIsWhitelisted(atc)&&!isBlacklisted(atc))return true;
   if(!naam)return false;
   return extraWhitelistMeds.has(naam.toLowerCase());
+}
+
+function isHandmatigUitgesloten(atc, naam){
+  const naamL=(naam||'').toLowerCase();
+  const atcU=(atc||'').toUpperCase();
+  for(const k of exclusieMeds){
+    if(naamL.includes(k))return true;
+    if(atcU.startsWith(k.toUpperCase()))return true;
+  }
+  return false;
+}
+
+// ── Exclusie functies ──
+function searchExclusieMed(){
+  const q=(document.getElementById('exclusieInput').value||'').toLowerCase().trim();
+  const sug=document.getElementById('exclusieSuggest');
+  if(q.length<2){sug.style.display='none';return;}
+  const hits=new Map();
+  rawRows.forEach(r=>{
+    const naam=(r[C.naam]||'').trim();
+    const atc=(r[C.atc]||'').trim();
+    if(!naam||naam.length<2)return;
+    if(naam.toLowerCase().includes(q)||atc.toLowerCase().includes(q)){
+      const key=naam.toLowerCase();
+      if(!hits.has(key))hits.set(key,{naam,atc});
+    }
+  });
+  const results=[...hits.values()].slice(0,8);
+  if(!results.length){sug.style.display='none';return;}
+  sug.innerHTML=results.map(m=>{
+    const safeNaam=(m.naam||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    return '<div class="ha-item" data-naam="'+safeNaam+'" data-atc="'+m.atc+'" onmousedown="selectExclusieMed(this.dataset.naam,this.dataset.atc)">'
+      +'<span style="color:var(--dim);font-size:10px;margin-right:6px">'+m.atc+'</span>'+m.naam+'</div>';
+  }).join('');
+  sug.style.display='block';
+}
+
+function selectExclusieMed(naam,atc){
+  document.getElementById('exclusieInput').value='';
+  document.getElementById('exclusieSuggest').style.display='none';
+  addExclusieMedItem(naam);
+}
+
+function addExclusieMed(){
+  const val=(document.getElementById('exclusieInput').value||'').trim();
+  if(!val)return;
+  document.getElementById('exclusieInput').value='';
+  document.getElementById('exclusieSuggest').style.display='none';
+  addExclusieMedItem(val);
+}
+
+function addExclusieMedItem(naam){
+  const key=naam.toLowerCase();
+  if(exclusieMeds.has(key)){notify(naam+' staat al in de exclusielijst','info');return;}
+  exclusieMeds.add(key);
+  renderExclusieTags();
+  reanalyse();
+  notify('🚫 '+naam+' uitgesloten');
+}
+
+function removeExclusieMed(key){
+  exclusieMeds.delete(key);
+  renderExclusieTags();
+  reanalyse();
+}
+
+function renderExclusieTags(){
+  const wrap=document.getElementById('exclusieTags');
+  if(!wrap)return;
+  wrap.innerHTML=[...exclusieMeds].map(k=>{
+    const safeK=k.replace(/&/g,'&amp;').replace(/"/g,'&quot;');
+    return '<span style="background:rgba(220,38,38,.1);border:1px solid rgba(220,38,38,.3);color:var(--red);border-radius:4px;padding:2px 7px;font-size:10px;cursor:pointer" data-key="'+safeK+'" onclick="removeExclusieMed(this.dataset.key)" title="Klik om te verwijderen">🚫 '+k+' ✕</span>';
+  }).join('');
 }
 
 // ═══════════════════════════════════════════
@@ -2222,6 +2434,7 @@ function saveSession(){
       donePids:[...donePids],
       selectedHuisartsen:[...selectedHuisartsen],
       notes:notes,
+      exclusieMeds:[...exclusieMeds],
     };
     localStorage.setItem('herhaalSession',JSON.stringify(data));
   }catch(e){}
@@ -2235,6 +2448,7 @@ function restoreSession(){
     if(data.donePids)data.donePids.forEach(p=>donePids.add(p));
     if(data.selectedHuisartsen)data.selectedHuisartsen.forEach(h=>selectedHuisartsen.add(h));
     if(data.notes)Object.assign(notes,data.notes);
+    if(data.exclusieMeds)data.exclusieMeds.forEach(m=>exclusieMeds.add(m));
   }catch(e){}
 }
 
@@ -2497,44 +2711,42 @@ function getOpgeslagenHash(){
   try{return localStorage.getItem('appPasswordHash')||APP_PASSWORD_HASH;}catch(e){return APP_PASSWORD_HASH;}
 }
 
-const WORKER_CODE="\n// ── HerhaalModule Analyse Worker ──\n// Ontvangt: {rawRows, crit, atcEnabled, extraWhitelistMeds}\n// Stuurt terug: {analysis}\n\nconst C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18};\n\nconst ATC_N={'A':'Maag/Metabolisme','B':'Bloed','C':'Cardiovasculair','D':'Dermatologie','G':'Urogenitaal','H':'Hormonen','J':'Anti-infectieus','L':'Oncologie','M':'Bewegingsapparaat','N':'Zenuwstelsel','P':'Antiparasitica','R':'Luchtwegen','S':'Zintuigen','V':'Diversen'};\n\nconst ATC_WHITELIST={'A02':'PPI','A10':'Antidiabetica','A11':'Vitamines','A12':'Mineralen','B01':'Antitrombotisch','C02':'Antihypertensiva','C03':'Diuretica','C07':'Betablokkers','C08':'Calciumantagonisten','C09':'ACE/ARB','C10':'Statines','G03':'Geslachtshormonen','G04':'Urologica','H03':'Schildklier','M04':'Jicht','M05':'Bisfosfonaten','N03A':'Anti-epileptica','N04B':'Parkinson','N06A':'Antidepressiva','N06D':'Dementie','R03':'Luchtwegen','V01':'Immunotherapie'};\n\nconst ATC_BLACKLIST={'N02A':1,'N06BA':1,'N05B':1,'N05C':1,'N05A':1,'N07BC':1,'N07BB':1,'N01A':1,'N02AB':1,'N02BG':1,'L01':1,'L04':1,'H02':1,'J01':1,'J05':1};\n\nfunction isBlacklisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_BLACKLIST).some(k=>atc.startsWith(k));}\nfunction isWhitelisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_WHITELIST).some(k=>atc.startsWith(k));}\n\nfunction parseDailyDose(kode){\n  if(!kode)return null;\n  kode=kode.trim().toUpperCase();\n  let fpd=null;\n  const mWr=kode.match(/^(\\d+)-(\\d+)W/);if(mWr){fpd=((+mWr[1])+(+mWr[2]))/2/7;}\n  const mDr=kode.match(/^(\\d+)-(\\d+)D/);if(mDr){fpd=((+mDr[1])+(+mDr[2]))/2;}\n  const mW=kode.match(/^(\\d+(?:\\.\\d+)?)W/);if(mW&&fpd===null){fpd=+mW[1]/7;}\n  const mD=kode.match(/^(\\d+(?:\\.\\d+)?)D/);if(mD&&fpd===null){fpd=+mD[1];}\n  if(fpd===null)return null;\n  let amt=1;\n  const mA=kode.match(/[DW](\\d+(?:\\.\\d+)?)/);if(mA)amt=+mA[1];\n  if(kode.match(/[DW]0\\.5/))amt=0.5;\n  return fpd*amt;\n}\n\nfunction calcAdherence(dates,aantallen,dkode,margin){\n  if(dates.length<2)return{pct:null,onTime:0,miss:0,late:0,events:[]};\n  const daily=parseDailyDose(dkode);\n  const events=[];let onTime=0,miss=0,late=0;\n  dates.forEach((d,i)=>{\n    const ev={date:d,datum:new Date(d).toISOString().slice(0,10),aantal:aantallen[i],type:i===0?'eu':'ok'};\n    if(i>0&&daily){\n      const prev=new Date(dates[i-1]);\n      prev.setDate(prev.getDate()+Math.round(aantallen[i-1]/daily));\n      const cur=new Date(d);\n      const diff=Math.round((cur-prev)/(864e5));\n      ev.diff=diff;ev.expected=prev.toISOString();\n      if(Math.abs(diff)<=margin){ev.type='ok';onTime++;}\n      else if(diff>margin){ev.type='miss';miss++;}\n      else{ev.type='late';late++;}\n    }\n    events.push(ev);\n  });\n  const tot=onTime+miss+late;\n  return{pct:tot>0?Math.round(onTime/tot*100):null,onTime,miss,late,events};\n}\n\nfunction calcScore(count,months,fixed,adhPct,hasDose,c,isWL){\n  let s=0;\n  s+=Math.min(count/c.minP,2)*17.5;\n  s+=Math.min(months/c.minM,2)*17.5;\n  if(fixed)s+=8;\n  if(hasDose&&adhPct!==null){\n    s+=Math.round(adhPct*.4);\n    if(adhPct<60)s-=10;\n  } else if(!hasDose){s+=20;}\n  if(isWL)s+=9;\n  return Math.round(Math.min(Math.max(s,0),100));\n}\n\nfunction calcStatus(count,months,fixed,c,score){\n  if(count<c.minP)return'Uitgesloten';\n  if(months<c.minM)return'Uitgesloten';\n  if(c.reqF&&!fixed)return'Wisselende dosering';\n  return score>=65?'Aanbevolen':'Overwegen';\n}\n\nfunction redenAfwijzing(count,months,fixed,c,status){\n  if(status==='Aanbevolen')return null;\n  if(status==='Overwegen')return'Voldoet aan criteria maar score is laag';\n  if(status==='Wisselende dosering')return'Dosering wisselt — niet geschikt';\n  const r=[];\n  if(count<c.minP)r.push('Te weinig herhalingen ('+count+' van '+c.minP+' nodig)');\n  if(months<c.minM)r.push('Te kort onder behandeling ('+months+' van '+c.minM+' maanden nodig)');\n  return r.join(' · ')||'Onvoldoende gegevens';\n}\n\nself.onmessage=function(e){\n  const {rawRows,crit:c,atcEnabled,extraWhitelistMeds}=e.data;\n  const extraSet=new Set(extraWhitelistMeds||[]);\n\n  function isWLorExtra(atc,naam){\n    if(isWhitelisted(atc)&&!isBlacklisted(atc))return true;\n    return extraSet.has((naam||'').toLowerCase());\n  }\n\n  const grps={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim(),atc=(r[C.atc]||'').trim(),naam=(r[C.naam]||'').trim();\n    const dist=(r[C.dist]||'').trim(),herk=(r[C.herk]||'').trim(),uitg=(r[C.uitg]||'').trim();\n    const dkode=(r[C.dkode]||'').trim(),datum=(r[C.datum]||'').trim(),aantal=parseInt(r[C.aantal]||'0')||0;\n    if(!atc||atc==='0'||!naam||!pid)return;\n    if(dist!=='N')return;\n    if(herk==='D')return;\n    if(isBlacklisted(atc))return;\n    const dkodeUpper=dkode.toUpperCase();\n    const omschrUpper=(r[9]||'').toUpperCase();\n    if(/\\bZN\\b/.test(dkodeUpper)||omschrUpper.includes('ZO NODIG')||omschrUpper.includes('INDIEN NODIG'))return;\n    if(c.exclOZ&&(herk==='Z'||uitg==='ONB'))return;\n    const a3=atc.slice(0,3).toUpperCase();\n    if(atcEnabled[a3]===false)return;\n    const key=pid+'|'+atc+'|'+naam;\n    if(!grps[key])grps[key]={pid,atc,naam,dkodes:[],entries:[]};\n    if(!grps[key].dkodes.includes(dkode))grps[key].dkodes.push(dkode);\n    if(datum)grps[key].entries.push({date:datum,datum,aantal,uitg,herk});\n  });\n\n  const analysis=Object.values(grps).map(g=>{\n    g.entries.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);\n    const dates=g.entries.map(e=>e.date);\n    const aantallen=g.entries.map(e=>e.aantal);\n    const firstD=new Date(dates[0]),lastD=new Date(dates[dates.length-1]);\n    const months=dates.length>=2?Math.round((lastD-firstD)/(864e5*30)):0;\n    const fixedDose=new Set(g.dkodes).size<=1;\n    const count=g.entries.length;\n    const mainDkode=g.dkodes.filter(d=>d&&d.length>1&&!/^\\d{4}-\\d{2}/.test(d))[0]||'';\n    const daily=parseDailyDose(mainDkode);\n    const adh=calcAdherence(dates,aantallen,mainDkode,c.margin);\n    const atcGrp=ATC_N[g.atc[0]?.toUpperCase()]||g.atc[0]?.toUpperCase()||'';\n    const isWL=isWLorExtra(g.atc,g.naam);\n    const score=calcScore(count,months,fixedDose,adh.pct,!!mainDkode,c,isWL);\n    const status=calcStatus(count,months,fixedDose,c,score);\n    const herkM=g.entries.reduce((a,e)=>{a[e.herk]=(a[e.herk]||0)+1;return a},{});\n    const topHerk=Object.entries(herkM).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';\n    const lastDate=dates[dates.length-1];\n    const reden=redenAfwijzing(count,months,fixedDose,c,status);\n    const duurSignaal=months>=12?'stabiel':months<=1?'kort':'';\n    return{pid:g.pid,atc:g.atc,naam:g.naam,months,fixedDose,count,mainDkode,daily,adh,atcGrp,score,status,reden,duurSignaal,topHerk,dates,aantallen,isWL,lastDate,entries:g.entries};\n  }).filter(m=>m.naam);\n\n  self.postMessage({analysis});\n};\n";
-
-
-// ═══════════════════════════════════════════
-// WEB WORKER — analyse in aparte thread
-// ═══════════════════════════════════════════
-let _analyseWorker=null;
-let _workerBusy=false;
-let _pendingAnalyse=null;
+const WORKER_CODE="\n// ── HerhaalModule Analyse Worker v2 ──\n// Merkdeduplicatie: groepeer op pid|atc|sterkte ipv pid|atc|naam\n// Exclusies: handmatig uitgesloten middelen\n// Inactiviteit: patiënten met laatste verstrekking ouder dan maxInactief dagen\n// Continuïteit: gaten >180d tellen niet mee als behandelduur\n\nconst C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18};\nconst ATC_N={'A':'Maag/Metabolisme','B':'Bloed','C':'Cardiovasculair','D':'Dermatologie','G':'Urogenitaal','H':'Hormonen','J':'Anti-infectieus','L':'Oncologie','M':'Bewegingsapparaat','N':'Zenuwstelsel','P':'Antiparasitica','R':'Luchtwegen','S':'Zintuigen','V':'Diversen'};\nconst ATC_WHITELIST={'A02':1,'A10':1,'A11':1,'A12':1,'B01':1,'C02':1,'C03':1,'C07':1,'C08':1,'C09':1,'C10':1,'G03':1,'G04':1,'H03':1,'M04':1,'M05':1,'N03A':1,'N04B':1,'N06A':1,'N06D':1,'R03':1,'V01':1};\nconst ATC_BLACKLIST={'N02A':1,'N06BA':1,'N05B':1,'N05C':1,'N05A':1,'N07BC':1,'N07BB':1,'N01A':1,'N02AB':1,'N02BG':1,'L01':1,'L04':1,'H02':1,'J01':1,'J05':1};\n\nfunction isBlacklisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_BLACKLIST).some(k=>atc.startsWith(k));}\nfunction isWhitelisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_WHITELIST).some(k=>atc.startsWith(k));}\n\nfunction extractSterkte(naam){\n  const m=(naam||'').toUpperCase().match(/(\\d+(?:[,.]\\d+)?)\\s*(MCG|MG|G|ML|IE|MMOL|%)/);\n  return m?m[1].replace(',','.')+m[2]:'';\n}\n\nfunction parseDailyDose(kode){\n  if(!kode)return null;\n  kode=kode.trim().toUpperCase();\n  let fpd=null;\n  const mWr=kode.match(/^(\\d+)-(\\d+)W/);if(mWr){fpd=((+mWr[1])+(+mWr[2]))/2/7;}\n  const mDr=kode.match(/^(\\d+)-(\\d+)D/);if(mDr){fpd=((+mDr[1])+(+mDr[2]))/2;}\n  const mW=kode.match(/^(\\d+(?:\\.\\d+)?)W/);if(mW&&fpd===null){fpd=+mW[1]/7;}\n  const mD=kode.match(/^(\\d+(?:\\.\\d+)?)D/);if(mD&&fpd===null){fpd=+mD[1];}\n  if(fpd===null)return null;\n  let amt=1;\n  const mA=kode.match(/[DW](\\d+(?:\\.\\d+)?)/);if(mA)amt=+mA[1];\n  if(kode.match(/[DW]0\\.5/))amt=0.5;\n  return fpd*amt;\n}\n\nfunction calcAdherence(dates,aantallen,dkode,margin){\n  if(dates.length<2)return{pct:null,onTime:0,miss:0,late:0,events:[]};\n  const daily=parseDailyDose(dkode);\n  const events=[];let onTime=0,miss=0,late=0;\n  dates.forEach((d,i)=>{\n    const ev={date:d,datum:new Date(d).toISOString().slice(0,10),aantal:aantallen[i],type:i===0?'eu':'ok'};\n    if(i>0&&daily){\n      const prev=new Date(dates[i-1]);\n      prev.setDate(prev.getDate()+Math.round(aantallen[i-1]/daily));\n      const cur=new Date(d);\n      const diff=Math.round((cur-prev)/(864e5));\n      ev.diff=diff;ev.expected=prev.toISOString();\n      if(Math.abs(diff)<=margin){ev.type='ok';onTime++;}\n      else if(diff>margin){ev.type='miss';miss++;}\n      else{ev.type='late';late++;}\n    }\n    events.push(ev);\n  });\n  const tot=onTime+miss+late;\n  return{pct:tot>0?Math.round(onTime/tot*100):null,onTime,miss,late,events};\n}\n\nfunction calcContinuousMonths(dates){\n  // Bereken behandelduur rekening houdend met continuïteit\n  // Een gat van >180 dagen = nieuwe episode, tel alleen de meest recente episode\n  if(dates.length<2)return 0;\n  let episodeStart=new Date(dates[0]);\n  for(let i=1;i<dates.length;i++){\n    const gap=Math.round((new Date(dates[i])-new Date(dates[i-1]))/864e5);\n    if(gap>180)episodeStart=new Date(dates[i]); // nieuwe episode na lang gat\n  }\n  const lastD=new Date(dates[dates.length-1]);\n  return Math.round((lastD-episodeStart)/(864e5*30));\n}\n\nfunction calcScore(count,months,fixed,adhPct,hasDose,c,isWL){\n  let s=0;\n  s+=Math.min(count/c.minP,2)*17.5;\n  s+=Math.min(months/c.minM,2)*17.5;\n  if(fixed)s+=8;\n  if(hasDose&&adhPct!==null){\n    s+=Math.round(adhPct*.4);\n    if(adhPct<60)s-=10;\n  } else if(!hasDose){s+=20;}\n  if(isWL)s+=9;\n  return Math.round(Math.min(Math.max(s,0),100));\n}\n\nfunction calcStatus(count,months,fixed,c,score){\n  if(count<c.minP)return'Uitgesloten';\n  if(months<c.minM)return'Uitgesloten';\n  if(c.reqF&&!fixed)return'Wisselende dosering';\n  return score>=65?'Aanbevolen':'Overwegen';\n}\n\nfunction redenAfwijzing(count,months,fixed,c,status){\n  if(status==='Aanbevolen')return null;\n  if(status==='Overwegen')return'Voldoet aan criteria maar score is laag';\n  if(status==='Wisselende dosering')return'Dosering wisselt — niet geschikt';\n  const r=[];\n  if(count<c.minP)r.push('Te weinig herhalingen ('+count+' van '+c.minP+' nodig)');\n  if(months<c.minM)r.push('Te kort onder behandeling ('+months+' van '+c.minM+' maanden)');\n  return r.join(' · ')||'Onvoldoende gegevens';\n}\n\nself.onmessage=function(e){\n  const {rawRows,crit:c,atcEnabled,extraWhitelistMeds,exclusieMeds}=e.data;\n  const extraSet=new Set(extraWhitelistMeds||[]);\n  const exclusieSet=new Set((exclusieMeds||[]).map(s=>s.toLowerCase()));\n  const maxInactief=c.maxInactief||90;\n\n  function isWLorExtra(atc,naam){\n    if(isWhitelisted(atc)&&!isBlacklisted(atc))return true;\n    return extraSet.has((naam||'').toLowerCase());\n  }\n\n  function isUitgesloten(atc,naam){\n    const naamL=(naam||'').toLowerCase();\n    const atcU=(atc||'').toUpperCase();\n    for(const k of exclusieSet){\n      if(naamL.includes(k))return true;\n      if(atcU.startsWith(k.toUpperCase()))return true;\n    }\n    return false;\n  }\n\n  // Bepaal peildatum (meest recente datum in dataset)\n  let peilTs=0;\n  rawRows.forEach(r=>{const d=r[C.datum];if(d){const t=new Date(d).getTime();if(t>peilTs)peilTs=t;}});\n  const peilDatum=peilTs?new Date(peilTs):new Date();\n\n  // Bepaal laatste verstrekking per patiënt voor inactiviteitscheck\n  const patLaatst={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim();\n    const datum=r[C.datum];\n    if(pid&&datum){\n      const t=new Date(datum).getTime();\n      if(!patLaatst[pid]||t>patLaatst[pid])patLaatst[pid]=t;\n    }\n  });\n\n  // Groepeer op pid|atc|sterkte (merkdeduplicatie)\n  const grps={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim(),atc=(r[C.atc]||'').trim(),naam=(r[C.naam]||'').trim();\n    const dist=(r[C.dist]||'').trim(),herk=(r[C.herk]||'').trim(),uitg=(r[C.uitg]||'').trim();\n    const dkode=(r[C.dkode]||'').trim(),datum=(r[C.datum]||'').trim(),aantal=parseInt(r[C.aantal]||'0')||0;\n    if(!atc||atc==='0'||!naam||!pid)return;\n    if(dist!=='N')return;\n    if(herk==='D')return;\n    if(isBlacklisted(atc))return;\n    if(isUitgesloten(atc,naam))return;\n    const dkodeUpper=dkode.toUpperCase();\n    const omschrUpper=(r[9]||'').toUpperCase();\n    if(/\\bZN\\b/.test(dkodeUpper)||omschrUpper.includes('ZO NODIG')||omschrUpper.includes('INDIEN NODIG'))return;\\n    // Variabele dosering (bereik): bijv 1-2D1T, 3-6D1T — niet geschikt voor herhaalservice\\n    if(/^\\\\d+-\\\\d+[DW]/i.test(dkode))return;\n    if(c.exclOZ&&(herk==='Z'||uitg==='ONB'))return;\n    const a3=atc.slice(0,3).toUpperCase();\n    if(atcEnabled[a3]===false)return;\n    // Inactiviteitscheck: sla patiënt over als laatste verstrekking te lang geleden\n    const patTs=patLaatst[pid]||0;\n    const dagsSinds=Math.round((peilDatum.getTime()-patTs)/864e5);\n    if(dagsSinds>maxInactief)return;\n    // Merkdeduplicatie: groepeer op pid|atc|sterkte\n    const sterkte=extractSterkte(naam);\n    const key=pid+'|'+atc+'|'+sterkte;\n    if(!grps[key])grps[key]={pid,atc,naam,sterkte,namen:new Set(),dkodes:[],entries:[]};\n    grps[key].namen.add(naam);\n    if(!grps[key].dkodes.includes(dkode))grps[key].dkodes.push(dkode);\n    if(datum)grps[key].entries.push({date:datum,datum,aantal,uitg,herk});\n  });\n\n  const analysis=Object.values(grps).map(g=>{\n    g.entries.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);\n    const dates=g.entries.map(e=>e.date);\n    const aantallen=g.entries.map(e=>e.aantal);\n    // Gebruik de meest voorkomende naam als weergavenaam\n    const naamFreq={};\n    g.namen.forEach(n=>{naamFreq[n]=(naamFreq[n]||0)+1;});\n    const weergaveNaam=Object.entries(naamFreq).sort((a,b)=>b[1]-a[1])[0]?.[0]||g.naam;\n    const aantalMerken=g.namen.size;\n    const months=calcContinuousMonths(dates);\n    const fixedDose=new Set(g.dkodes).size<=1;\n    const count=g.entries.length;\n    const mainDkode=g.dkodes.filter(d=>d&&d.length>1&&!/^\\d{4}-\\d{2}/.test(d))[0]||'';\n    const daily=parseDailyDose(mainDkode);\n    const adh=calcAdherence(dates,aantallen,mainDkode,c.margin);\n    const atcGrp=ATC_N[g.atc[0]?.toUpperCase()]||g.atc[0]?.toUpperCase()||'';\n    const isWL=isWLorExtra(g.atc,weergaveNaam);\n    const score=calcScore(count,months,fixedDose,adh.pct,!!mainDkode,c,isWL);\n    const status=calcStatus(count,months,fixedDose,c,score);\n    const herkM=g.entries.reduce((a,e)=>{a[e.herk]=(a[e.herk]||0)+1;return a},{});\n    const topHerk=Object.entries(herkM).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';\n    const lastDate=dates[dates.length-1];\n    const reden=redenAfwijzing(count,months,fixedDose,c,status);\n    const duurSignaal=months>=12?'stabiel':months<=1?'kort':'';\n    return{pid:g.pid,atc:g.atc,naam:weergaveNaam,aantalMerken,sterkte:g.sterkte,months,fixedDose,count,mainDkode,daily,adh,atcGrp,score,status,reden,duurSignaal,topHerk,dates,aantallen,isWL,lastDate,entries:g.entries};\n  }).filter(m=>m.naam);\n\n  self.postMessage({analysis});\n};\n";;
 
 function getWorker(){
   if(_analyseWorker)return _analyseWorker;
-  const blob=new Blob([WORKER_CODE],{type:'application/javascript'});
-  _analyseWorker=new Worker(URL.createObjectURL(blob));
-  _analyseWorker.onmessage=function(e){
-    const {analysis:result}=e.data;
-    // Herstel Date objecten (worden geserialiseerd als string door postMessage)
-    analysis=result.map(m=>({
-      ...m,
-      dates:m.dates.map(d=>new Date(d)),
-      lastDate:m.lastDate?new Date(m.lastDate):null,
-      entries:(m.entries||[]).map(en=>({...en,date:new Date(en.date),expected:en.expected?new Date(en.expected):undefined})),
-      adh:{...m.adh,events:(m.adh.events||[]).map(ev=>({...ev,date:new Date(ev.date),expected:ev.expected?new Date(ev.expected):undefined}))}
-    }));
-    _workerBusy=false;
-    document.getElementById('analyseLoader').style.display='none';
-    cachedPatSumm=buildPatSumm();
-    renderAll();
-    // Als er een pending analyse is, voer die nu uit
-    if(_pendingAnalyse){const fn=_pendingAnalyse;_pendingAnalyse=null;fn();}
-  };
-  _analyseWorker.onerror=function(err){
-    console.error('Worker fout:',err);
-    _workerBusy=false;
-    document.getElementById('analyseLoader').style.display='none';
-    notify('Analysefout — herlaad de pagina','info');
-  };
-  return _analyseWorker;
+  try{
+    const blob=new Blob([WORKER_CODE],{type:'application/javascript'});
+    const worker=new Worker(URL.createObjectURL(blob));
+    _analyseWorker=worker;
+    _analyseWorker.onmessage=function(e){
+      const {analysis:result}=e.data;
+      analysis=result.map(m=>({
+        ...m,
+        dates:m.dates.map(d=>new Date(d)),
+        lastDate:m.lastDate?new Date(m.lastDate):null,
+        entries:(m.entries||[]).map(en=>({...en,date:new Date(en.date),expected:en.expected?new Date(en.expected):undefined})),
+        adh:{...m.adh,events:(m.adh.events||[]).map(ev=>({...ev,date:new Date(ev.date),expected:ev.expected?new Date(ev.expected):undefined}))}
+      }));
+      _workerBusy=false;
+      document.getElementById('analyseLoader').style.display='none';
+      cachedPatSumm=buildPatSumm();
+      renderAll();
+      if(_pendingAnalyse){const fn=_pendingAnalyse;_pendingAnalyse=null;fn();}
+    };
+    _analyseWorker.onerror=function(err){
+      console.warn('Worker niet beschikbaar, val terug op synchrone analyse:',err.message);
+      _analyseWorker=null;
+      _workerBusy=false;
+      document.getElementById('analyseLoader').style.display='none';
+      runAnalysisSync();
+    };
+    return _analyseWorker;
+  }catch(err){
+    console.warn('Worker aanmaken mislukt, gebruik synchrone analyse:',err.message);
+    _analyseWorker=null;
+    return null;
+  }
 }
 
 // ═══════════════════════════════════════════
