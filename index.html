@@ -3,43 +3,84 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HerhaalModule Analyser</title>
+<title>HerhaalModule Analyser — Service Apotheek Hanzeplein</title>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.4/dist/pizzip.min.js" onerror="console.warn('PizZip CDN 1 mislukt, fallback laden…');"></script>
+<script>
+// Fallback: als jsDelivr ook mislukt, probeer cdnjs bij eerste gebruik
+window._pizzipCdns=[
+  'https://cdn.jsdelivr.net/npm/pizzip@3.1.4/dist/pizzip.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.4/pizzip.min.js',
+  'https://cdnjs.cloudflare.com/ajax/libs/pizzip/3.1.1/pizzip.js'
+];
+function laadScript(src){
+  return new Promise(function(resolve,reject){
+    // Al geladen?
+    if(document.querySelector('script[data-lib="pizzip"]')){setTimeout(resolve,100);return;}
+    var s=document.createElement('script');
+    s.src=src;s.dataset.lib='pizzip';
+    s.onload=resolve;
+    s.onerror=function(){reject(new Error('Kon niet laden: '+src));};
+    document.head.appendChild(s);
+  });
+}
+async function ensurePizZip(){
+  if(typeof PizZip!=='undefined')return;
+  for(var i=0;i<window._pizzipCdns.length;i++){
+    try{
+      await laadScript(window._pizzipCdns[i]);
+      if(typeof PizZip!=='undefined'){console.log('PizZip geladen via fallback #'+i);return;}
+    }catch(e){console.warn('PizZip CDN '+i+' mislukt:',e.message);}
+  }
+  throw new Error('Word-bibliotheek (PizZip) kon niet worden geladen. Controleer uw internetverbinding en probeer de pagina te herladen.');
+}
+</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
 :root{
-  --bg:#f4f6f9;--surf:#ffffff;--s2:#f0f2f6;--s3:#e8ebf0;--border:#d1d9e6;
-  --accent:#2563eb;--green:#059669;--amber:#d97706;--red:#dc2626;--purple:#7c3aed;
-  --text:#1e293b;--dim:#475569;--muted:#94a3b8;
-  --mono:'IBM Plex Mono',monospace;--sans:'IBM Plex Sans',sans-serif;
+  /* ── Hanzeplein kleurenpalet ── */
+  --bg:#eef5f9;           /* lichtblauwe achtergrond */
+  --surf:#ffffff;          /* wit oppervlak */
+  --s2:#dff0f7;            /* lichtblauw vlak */
+  --s3:#c8e5f2;            /* iets donkerder blauw vlak */
+  --border:#b0d4e8;        /* blauwe rand */
+  --accent:#009ecb;        /* primair cyaan-blauw */
+  --accent-dark:#0d2d5e;   /* donker marineblauw */
+  --accent-hover:#0088b2;  /* hover-variant cyaan */
+  --green:#059669;--amber:#d97706;--red:#dc2626;--purple:#7c3aed;
+  --text:#0d2d5e;          /* donkerblauw als primaire tekstkleur */
+  --dim:#2a6080;           /* middenblauw */
+  --muted:#6a9ab8;         /* gedempte blauwe tint */
+  --mono:'JetBrains Mono','IBM Plex Mono',monospace;--sans:'Inter','IBM Plex Sans',sans-serif;
 }
 *{box-sizing:border-box;margin:0;padding:0;}
-html,body{height:100%;overflow:hidden;}body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:13px;line-height:1.55;}
-::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:var(--s2);}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+html,body{height:100%;overflow:hidden;}body{background:var(--bg);color:var(--text);font-family:var(--sans);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased;}
+::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-track{background:var(--s2);}::-webkit-scrollbar-thumb{background:var(--accent);opacity:.4;border-radius:3px;}
 
 /* ── Header ── */
-header{background:var(--surf);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:200;}
+header{background:var(--accent-dark);border-bottom:none;padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:52px;position:sticky;top:0;z-index:200;}
 .logo{display:flex;align-items:center;gap:10px;}
 .logo-icon{width:28px;height:28px;background:var(--accent);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;}
-.logo-text{font-family:var(--mono);font-weight:600;font-size:13px;}
-.logo-sub{font-size:10px;color:var(--muted);font-family:var(--mono);}
+.logo-text{font-family:var(--mono);font-weight:600;font-size:13px;color:#ffffff;}
+.logo-sub{font-size:10px;color:rgba(255,255,255,.6);font-family:var(--mono);}
 
 /* ── Layout ── */
 .app{display:flex;height:calc(100vh - 52px);overflow:hidden;}
 
 /* ── Left panel: settings (collapsible) ── */
-.settings-panel{width:240px;background:var(--surf);border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;transition:width .2s;}
+.settings-panel{width:240px;background:#f4fafd;border-right:1px solid var(--border);display:flex;flex-direction:column;flex-shrink:0;transition:width .2s;}
 .settings-panel.collapsed{width:40px;}
 .sp-inner{padding:14px 12px;display:flex;flex-direction:column;gap:16px;overflow-y:auto;overflow-x:hidden;flex:1;}
 .settings-panel.collapsed .sp-inner{display:none;}
 .sp-toggle{width:40px;height:40px;background:none;border:none;border-bottom:1px solid var(--border);cursor:pointer;color:var(--muted);font-size:16px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.sp-toggle:hover{color:var(--text);background:var(--s2);}
+.sp-toggle:hover{color:var(--accent);background:var(--s2);}
 
-.sec-title{font-family:var(--mono);font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:7px;}
+.sec-title{font-family:var(--sans);font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:7px;font-weight:600;}
 .upload-zone{border:2px dashed var(--border);border-radius:8px;padding:14px 10px;text-align:center;cursor:pointer;transition:all .2s;background:var(--s2);}
-.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(59,130,246,.07);}
+.upload-zone:hover,.upload-zone.drag{border-color:var(--accent);background:rgba(0,158,203,.07);}
 .upload-zone .ico{font-size:22px;margin-bottom:5px;}
 #fileInput{display:none;}
 
@@ -47,12 +88,12 @@ header{background:var(--surf);border-bottom:1px solid var(--border);padding:0 20
 .cr-row:last-child{border-bottom:none;}
 .cr-top{display:flex;justify-content:space-between;margin-bottom:2px;}
 .cr-lbl{font-size:11px;color:var(--dim);}
-.cr-val{font-family:var(--mono);font-size:11px;color:var(--accent);}
-input[type=range]{width:100%;accent-color:var(--accent);height:3px;}
+.cr-val{font-family:var(--mono);font-size:11px;color:var(--accent-dark);font-weight:600;}
+input[type=range]{width:100%;accent-color:var(--accent);height:4px;}
 .toggle{display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 0;}
 .toggle input{display:none;}
 .toggle-track{width:28px;height:15px;background:var(--border);border-radius:8px;position:relative;transition:background .2s;flex-shrink:0;}
-.toggle input:checked+.toggle-track{background:var(--green);}
+.toggle input:checked+.toggle-track{background:var(--accent);}
 .toggle-thumb{width:9px;height:9px;background:white;border-radius:50%;position:absolute;top:3px;left:3px;transition:left .2s;}
 .toggle input:checked+.toggle-track .toggle-thumb{left:16px;}
 .toggle-lbl{font-size:11px;color:var(--dim);line-height:1.3;}
@@ -61,27 +102,27 @@ input[type=range]{width:100%;accent-color:var(--accent);height:3px;}
 .main-area{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;}
 
 /* ── Toolbar ── */
-.toolbar{background:var(--surf);border-bottom:1px solid var(--border);padding:8px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;}
+.toolbar{background:#f4fafd;border-bottom:1px solid var(--border);padding:8px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0;}
 .toolbar-left{display:flex;align-items:center;gap:8px;flex:1;flex-wrap:wrap;}
 .toolbar-right{display:flex;align-items:center;gap:8px;}
 
 /* ── Tabs ── */
 .tab-bar{display:flex;gap:2px;background:var(--s2);border-radius:7px;padding:3px;border:1px solid var(--border);}
-.tab-btn{padding:5px 12px;border-radius:5px;cursor:pointer;font-size:12px;color:var(--muted);border:none;background:none;font-family:var(--sans);white-space:nowrap;}
-.tab-btn.active{background:var(--surf);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.3);}
+.tab-btn{padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--dim);border:none;background:none;font-family:var(--sans);white-space:nowrap;font-weight:500;}
+.tab-btn.active{background:var(--accent-dark);color:#fff;box-shadow:0 1px 4px rgba(13,45,94,.3);}
 .tab-content{display:none;}.tab-content.active{display:flex;flex-direction:column;min-height:0;}
 
 /* ── Buttons ── */
 .btn{padding:6px 12px;border-radius:6px;border:none;cursor:pointer;font-family:var(--sans);font-size:12px;font-weight:500;transition:all .15s;display:inline-flex;align-items:center;gap:5px;}
-.btn-primary{background:var(--accent);color:white;}.btn-primary:hover{background:#2563eb;}
-.btn-ghost{background:transparent;color:var(--dim);border:1px solid var(--border);}.btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
-.btn-green{background:var(--green);color:white;}.btn-green:hover{background:#059669;}
+.btn-primary{background:var(--accent);color:white;}.btn-primary:hover{background:var(--accent-hover);}
+.btn-ghost{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.25);}.btn-ghost:hover{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.5);color:#fff;}
+.btn-green{background:var(--accent-dark);color:white;}.btn-green:hover{background:var(--accent);}
 .btn-amber{background:var(--amber);color:#1a1a1a;}.btn-amber:hover{background:#d97706;}
 .btn-sm{padding:4px 9px;font-size:11px;}
 .btn-xs{padding:3px 7px;font-size:10px;}
 
 /* ── Stats row ── */
-.stats-row{display:flex;gap:10px;padding:14px 20px;background:var(--surf);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;}
+.stats-row{display:flex;gap:10px;padding:14px 20px;background:#f4fafd;border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;}
 .stat-pill{background:var(--s2);border:1px solid var(--border);border-radius:8px;padding:8px 14px;display:flex;align-items:center;gap:10px;}
 .stat-pill-val{font-family:var(--mono);font-size:20px;font-weight:600;line-height:1;}
 .stat-pill-info{display:flex;flex-direction:column;}
@@ -95,21 +136,21 @@ input[type=range]{width:100%;accent-color:var(--accent);height:3px;}
 /* ── Worklist: kandidatenlijst + detail split ── */
 .wl-layout{display:grid;grid-template-columns:340px 1fr;gap:0;flex:1;min-height:0;}
 .wl-list{border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden;}
-.wl-list-header{padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surf);display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
+.wl-list-header{padding:10px 14px;border-bottom:1px solid var(--border);background:#f4fafd;display:flex;flex-direction:column;gap:8px;flex-shrink:0;}
 .wl-list-body{overflow-y:auto;flex:1;}
 .wl-detail{overflow-y:auto;background:var(--bg);}
 
 /* ── Patiëntitem in lijst ── */
-.pat-item{padding:10px 14px;border-bottom:1px solid rgba(42,51,72,.5);cursor:pointer;transition:background .15s;display:flex;align-items:flex-start;gap:10px;}
+.pat-item{padding:12px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .15s;display:flex;align-items:flex-start;gap:10px;}
 .pat-item:hover{background:var(--s2);}
-.pat-item.active{background:rgba(59,130,246,.08);border-left:3px solid var(--accent);}
+.pat-item.active{background:rgba(0,158,203,.1);border-left:3px solid var(--accent);}
 .pat-item.done{opacity:.45;}
 .pat-cb{margin-top:3px;width:14px;height:14px;cursor:pointer;accent-color:var(--accent);flex-shrink:0;}
 .pat-main{flex:1;min-width:0;}
-.pat-num{font-family:var(--mono);font-size:13px;font-weight:600;}
-.pat-sub{font-size:10px;color:var(--muted);margin-top:2px;display:flex;gap:8px;flex-wrap:wrap;}
+.pat-num{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:.3px;}
+.pat-sub{font-size:11px;color:var(--muted);margin-top:3px;display:flex;gap:8px;flex-wrap:wrap;}
 .pat-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;}
-.pat-adh{font-family:var(--mono);font-size:13px;font-weight:600;}
+.pat-adh{font-family:var(--mono);font-size:15px;font-weight:700;}
 .pat-done-btn{background:none;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-size:10px;padding:2px 6px;cursor:pointer;white-space:nowrap;}
 .pat-done-btn:hover{border-color:var(--green);color:var(--green);}
 .pat-item.done .pat-done-btn{background:rgba(16,185,129,.1);border-color:var(--green);color:var(--green);}
@@ -118,7 +159,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:3px;}
 .detail-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;gap:10px;color:var(--muted);}
 .detail-wrap{padding:16px 20px;}
 .detail-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;}
-.detail-pid{font-family:var(--mono);font-size:22px;font-weight:600;}
+.detail-pid{font-family:var(--mono);font-size:22px;font-weight:600;color:var(--accent-dark);}
 .detail-meta{font-size:11px;color:var(--muted);margin-top:3px;}
 
 /* ── Kopieer-panel (het primaire doel!) ── */
@@ -130,7 +171,7 @@ input[type=range]{width:100%;accent-color:var(--accent);height:3px;}
 
 /* ── Aanbevolen middelen chips ── */
 .med-chips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:12px;}
-.med-chip{background:var(--s2);border:1px solid var(--border);border-radius:5px;padding:4px 8px;font-size:11px;display:flex;align-items:center;gap:5px;}
+.med-chip{background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:12px;display:flex;align-items:center;gap:5px;}
 .med-chip.aanb{border-color:rgba(16,185,129,.4);background:rgba(16,185,129,.07);}
 .med-chip.overw{border-color:rgba(245,158,11,.4);background:rgba(245,158,11,.07);}
 .med-chip-name{color:var(--text);}
@@ -163,9 +204,9 @@ input[type=range]{width:100%;accent-color:var(--accent);height:3px;}
 .table-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;}
 .t-title{font-weight:600;font-size:13px;}
 table{width:100%;border-collapse:collapse;}
-th{background:var(--s2);padding:7px 12px;text-align:left;font-size:10px;font-family:var(--mono);letter-spacing:.6px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;}
-td{padding:7px 12px;border-bottom:1px solid rgba(42,51,72,.4);font-size:12px;vertical-align:middle;}
-tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(37,99,235,.04);}
+th{background:var(--s2);padding:7px 12px;text-align:left;font-size:10px;font-family:var(--mono);letter-spacing:.6px;text-transform:uppercase;color:var(--dim);border-bottom:1px solid var(--border);white-space:nowrap;}
+td{padding:9px 14px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle;}
+tr:last-child td{border-bottom:none;}tr:hover td{background:rgba(0,158,203,.05);}
 
 /* ── Badges ── */
 .badge{display:inline-flex;align-items:center;padding:2px 6px;border-radius:3px;font-size:10px;font-family:var(--mono);font-weight:600;white-space:nowrap;}
@@ -321,6 +362,47 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
 #analyseLoader{position:fixed;bottom:20px;right:20px;background:var(--accent);color:white;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:500;display:none;align-items:center;gap:8px;z-index:500;box-shadow:0 4px 14px rgba(0,0,0,.15);}
 .loader-spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.4);border-top-color:white;border-radius:50%;animation:spin .7s linear infinite;}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── Bestand Laad Overlay ── */
+#laadOverlay{
+  position:fixed;inset:0;background:rgba(13,45,94,.88);backdrop-filter:blur(3px);
+  z-index:9998;display:none;align-items:center;justify-content:center;
+}
+.lo-card{
+  background:var(--surf);border:1px solid var(--border);border-radius:16px;
+  padding:34px 42px;width:460px;max-width:92vw;
+  box-shadow:0 20px 60px rgba(0,0,0,.35);
+}
+.lo-icon{font-size:32px;text-align:center;margin-bottom:10px;}
+.lo-bestand{font-size:14px;font-weight:600;color:var(--accent-dark);text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px;}
+.lo-meta{font-size:12px;color:var(--muted);text-align:center;margin-bottom:22px;min-height:18px;}
+/* Fasen-balk */
+.lo-fasen{display:flex;align-items:flex-start;margin-bottom:18px;}
+.lo-fase{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;min-width:0;}
+.lo-fase-dot{
+  width:30px;height:30px;border-radius:50%;border:2px solid var(--border);
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;
+  color:var(--muted);background:var(--surf);transition:all .3s;flex-shrink:0;
+}
+.lo-fase-dot.actief{border-color:var(--accent);color:var(--accent);background:rgba(0,158,203,.1);}
+.lo-fase-dot.klaar{border-color:var(--green);background:var(--green);color:white;}
+.lo-fase-lbl{font-size:10px;color:var(--muted);text-align:center;line-height:1.3;transition:color .3s;}
+.lo-fase-lbl.actief{color:var(--accent);font-weight:600;}
+.lo-fase-lbl.klaar{color:var(--green);}
+.lo-lijn-wrap{flex:0.6;display:flex;align-items:flex-start;padding-top:13px;margin:0 2px;}
+.lo-lijn{width:100%;height:2px;background:var(--border);border-radius:1px;transition:background .4s;}
+.lo-lijn.klaar{background:var(--green);}
+/* Progress bar */
+.lo-balk-wrap{background:var(--s3);border-radius:6px;height:7px;overflow:hidden;margin-bottom:10px;}
+.lo-balk{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent-dark));border-radius:6px;transition:width .25s ease;width:0%;}
+.lo-balk.klaar{background:var(--green);}
+/* Statistieken */
+.lo-stats{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.lo-rows{font-family:var(--mono);font-size:12px;color:var(--accent-dark);font-weight:600;}
+.lo-tijd{font-family:var(--mono);font-size:11px;color:var(--muted);}
+.lo-tip{font-size:10px;color:var(--muted);text-align:center;line-height:1.6;
+  padding:8px 10px;background:var(--s2);border-radius:6px;border:1px solid var(--border);}
 </style>
 </head>
 <body>
@@ -328,7 +410,12 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
 <!-- LOGIN SCHERM -->
 <div id="loginScreen">
   <div class="login-box">
-    <div class="login-icon">💊</div>
+    <div class="login-icon"><svg width="56" height="64" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="13" cy="10" r="10" fill="#009ecb"/>
+  <circle cx="19" cy="10" r="7" fill="white"/>
+  <circle cx="19" cy="26" r="10" fill="#009ecb"/>
+  <circle cx="13" cy="26" r="7" fill="white"/>
+</svg></div>
     <div class="login-title">HerhaalModule Analyser</div>
     <div class="login-sub">Voer het toegangswachtwoord in om de tool te openen.</div>
     <input
@@ -350,21 +437,26 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
 
 <!-- PRINT HEADER -->
 <div id="printHeader" style="padding:10px 0 16px;border-bottom:2px solid #333;margin-bottom:12px;">
-  <div style="font-size:18pt;font-weight:bold">HerhaalModule — Kandidatenlijst</div>
+  <div style="font-size:18pt;font-weight:bold">Herhaalservice — Service Apotheek Hanzeplein</div>
   <div style="font-size:10pt;color:#666;margin-top:4px" id="printMeta"></div>
 </div>
 
 <!-- HEADER -->
 <header>
   <div class="logo">
-    <div class="logo-icon">💊</div>
+    <div class="logo-icon" style="background:none;padding:0;width:32px;height:36px;"><svg width="32" height="36" viewBox="0 0 32 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <circle cx="13" cy="10" r="10" fill="#009ecb"/>
+  <circle cx="19" cy="10" r="7" fill="#0d2d5e"/>
+  <circle cx="19" cy="26" r="10" fill="#009ecb"/>
+  <circle cx="13" cy="26" r="7" fill="#0d2d5e"/>
+</svg></div>
     <div>
       <div class="logo-text">HerhaalModule Analyser</div>
-      <div class="logo-sub">Gemini · receptverstrekking · therapietrouw</div>
+      <div class="logo-sub">Herhaalservice — Service Apotheek Hanzeplein</div>
     </div>
   </div>
   <div style="display:flex;gap:8px;align-items:center">
-    <div id="bestandsInfo" style="display:none;font-size:11px;color:var(--muted);padding:4px 10px;background:var(--s2);border:1px solid var(--border);border-radius:6px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+    <div id="bestandsInfo" style="display:none;font-size:11px;color:rgba(255,255,255,.85);padding:4px 10px;background:rgba(255,255,255,.15);border:1px solid rgba(255,255,255,.25);border-radius:6px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
     <div id="dagTeller" style="display:none;font-size:12px;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:6px;padding:4px 10px;color:var(--green);font-weight:500">Vandaag: 0 aangemeld</div>
     <button class="btn btn-ghost btn-sm" onclick="loadDemo()">📋 Demo</button>
     <div id="exportBtn" style="display:none;position:relative;">
@@ -381,8 +473,8 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
 <div class="app">
 
 <!-- LEFT: INSTELLINGEN PANEL -->
-<aside class="settings-panel" id="settingsPanel">
-  <button class="sp-toggle" onclick="toggleSettings()" title="Instellingen inklappen">⚙</button>
+<aside class="settings-panel collapsed" id="settingsPanel">
+  <button class="sp-toggle" onclick="toggleSettings()" title="Instellingen openen / sluiten" style="font-size:18px;color:rgba(0,158,203,.7)">⚙</button>
   <div class="sp-inner">
 
     <div>
@@ -397,6 +489,20 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
       </div>
       <input type="file" id="fileInput" onchange="handleFile(event)">
       <div id="fileInfo" style="display:none;margin-top:6px;font-size:10px;color:var(--muted)"></div>
+      <!-- Samenvoegen knop — verschijnt na laden eerste bestand -->
+      <div id="mergeSection" style="display:none;margin-top:8px">
+        <div style="font-size:10px;color:var(--muted);margin-bottom:4px">Aanvullend bestand samenvoegen:</div>
+        <div class="upload-zone" id="mergeZone" style="padding:10px 8px;min-height:unset"
+             onclick="document.getElementById('mergeInput').click()"
+             ondragover="event.preventDefault();this.classList.add('drag')"
+             ondragleave="this.classList.remove('drag')"
+             ondrop="handleMergeDrop(event)">
+          <span style="font-size:18px">➕</span>
+          <p style="font-size:10px;color:var(--dim);margin:0"><strong style="color:var(--text)">Voeg bestand toe</strong><br>Duplicaten worden automatisch verwijderd</p>
+        </div>
+        <input type="file" id="mergeInput" onchange="handleMergeFile(event)" accept=".txt,.csv">
+        <div id="mergeInfo" style="display:none;margin-top:5px;font-size:10px;color:var(--muted)"></div>
+      </div>
     </div>
 
     <!-- ⚙ Geavanceerde instellingen (verborgen voor medewerkers) -->
@@ -425,6 +531,14 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
       <label class="toggle"><input type="checkbox" id="togDose" checked onchange="reanalyse()"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-lbl">Vaste dosering vereist</span></label>
       <label class="toggle"><input type="checkbox" id="togVU" onchange="reanalyse()"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-lbl">Alleen vervolguitgiftes (VU)</span></label>
       <label class="toggle"><input type="checkbox" id="togExcl" checked onchange="reanalyse()"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-lbl">Sluit notities/zorgregels uit</span></label>
+      <label class="toggle"><input type="checkbox" id="togPatroon" onchange="reanalyse()"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-lbl" style="display:flex;flex-direction:column;gap:1px">📊 Patroondetectie<span style="font-size:10px;color:var(--muted);font-weight:400">Detecteer vaste ophaalritmiek (bijv. acenocoumarol) ook zonder doseringscode</span></span></label>
+      <div id="patroonOpties" style="display:none;margin-left:36px;margin-top:4px">
+        <div class="cr-row" style="margin-bottom:6px">
+          <div class="cr-top"><span class="cr-lbl">Max. variatie ophaalinterval</span><span class="cr-val" id="vCV">30</span>%</div>
+          <input type="range" min="10" max="50" value="30" step="5" id="sCV" oninput="document.getElementById('vCV').textContent=this.value;debouncedReanalyse()">
+          <div style="font-size:10px;color:var(--muted);margin-top:2px">Lager = strenger patroon vereist. 30% = goed evenwicht</div>
+        </div>
+      </div>
     </div>
 
     <div>
@@ -476,17 +590,54 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
     </div>
   </div>
 </aside>
-
 <!-- RIGHT: MAIN -->
 <div class="main-area">
 
   <!-- EMPTY STATE -->
-  <div id="emptyState" class="empty" style="flex:1">
-    <div class="empty-ico">🗂️</div>
-    <div class="empty-ttl">Nog geen bestand geladen</div>
-    <div class="empty-sub">Sleep het exportbestand hierin, of klik op de knop hieronder.</div>
-    <button class="btn btn-primary" style="margin-top:8px" onclick="loadDemo()">📋 Demo data laden</button>
+  <div id="emptyState" style="flex:1;display:flex;align-items:center;justify-content:center;background:var(--bg);">
+    <div style="display:flex;flex-direction:column;align-items:center;gap:20px;max-width:420px;width:100%;padding:32px;">
+
+      <!-- Upload zone — groot en uitnodigend -->
+      <div id="emptyDropZone"
+           ondragover="event.preventDefault();this.classList.add('drag-active')"
+           ondragleave="this.classList.remove('drag-active')"
+           ondrop="this.classList.remove('drag-active');handleDrop(event)"
+           onclick="document.getElementById('fileInput').click()"
+           style="width:100%;border:2.5px dashed var(--border);border-radius:16px;padding:48px 32px;text-align:center;cursor:pointer;transition:all .2s;background:var(--surf)">
+        <div style="font-size:48px;margin-bottom:12px">📂</div>
+        <div style="font-size:18px;font-weight:600;color:var(--accent-dark);margin-bottom:6px">Sleep uw exportbestand hierin</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:20px">of klik om een bestand te kiezen</div>
+        <button class="btn btn-primary" style="font-size:14px;padding:10px 24px;pointer-events:none">
+          📁 Bestand kiezen
+        </button>
+      </div>
+
+      <!-- Scheidingslijn -->
+      <div style="display:flex;align-items:center;gap:12px;width:100%">
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+        <span style="font-size:12px;color:var(--muted)">of probeer eerst</span>
+        <div style="flex:1;height:1px;background:var(--border)"></div>
+      </div>
+
+      <!-- Demo knop — secundair -->
+      <button class="btn btn-ghost" style="font-size:13px;padding:8px 20px" onclick="loadDemo()">
+        📋 Demo data laden
+      </button>
+
+    </div>
   </div>
+
+  <style>
+    #emptyDropZone:hover, #emptyDropZone.drag-active {
+      border-color: var(--accent);
+      background: rgba(0,158,203,.05);
+    }
+    #emptyDropZone.drag-active {
+      border-color: var(--accent);
+      background: rgba(0,158,203,.1);
+      transform: scale(1.01);
+    }
+  </style>
 
   <div id="dashboard" style="display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden;">
 
@@ -516,16 +667,39 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
       </div>
     </div>
 
-    <!-- STATS ROW -->
-    <div class="stats-row">
-      <div class="stat-pill"><div class="stat-dot" style="background:var(--accent)"></div><div class="stat-pill-info"><div class="stat-pill-lbl">Patiënten</div><div class="stat-pill-sub">In de data geladen</div></div><div class="stat-pill-val" id="sP">—</div></div>
-      <div class="stat-pill" style="cursor:pointer" onclick="filterToKandidaten()" title="Klik om alleen kandidaten te tonen"><div class="stat-dot" style="background:var(--green)"></div><div class="stat-pill-info"><div class="stat-pill-lbl">Geschikt voor herhaalservice</div><div class="stat-pill-sub">≥1 medicijn aanbevolen</div></div><div class="stat-pill-val" id="sK" style="color:var(--green)">—</div></div>
-      <div class="stat-pill"><div class="stat-dot" style="background:#10b981"></div><div class="stat-pill-info"><div class="stat-pill-lbl">Aanbevolen medicijnen</div><div class="stat-pill-sub">unieke combinaties</div></div><div class="stat-pill-val" id="sR">—</div></div>
-      <div class="stat-pill"><div class="stat-dot" style="background:var(--amber)"></div><div class="stat-pill-info"><div class="stat-pill-lbl">Op tijd opgehaald</div><div class="stat-pill-sub">gemiddeld percentage</div></div><div class="stat-pill-val" id="sAdh">—</div></div>
-      <div class="stat-pill" style="margin-left:auto"><div class="stat-pill-info"><div class="stat-pill-lbl">Meest recente datum</div><div class="stat-pill-sub">in het bestand</div></div><div class="stat-pill-val" id="sPeil" style="font-size:13px">—</div></div>
-          <div class="stat-pill" style="gap:8px">
-        <div class="stat-pill-info"><div class="stat-pill-lbl">Herhaalinterval</div><div class="stat-pill-sub">voor synchronisatie</div></div>
-        <select id="herhaalInterval" onchange="if(activePid)showDetail(activePid)" style="font-family:var(--mono);font-size:13px;font-weight:600;background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--text)">
+    <!-- STATS ROW — vereenvoudigd -->
+    <div class="stats-row" style="padding:10px 20px;gap:16px;align-items:center">
+      <!-- Kandidaten teller — primair -->
+      <div class="stat-pill" style="cursor:pointer;background:rgba(0,158,203,.08);border-color:rgba(0,158,203,.3)" onclick="filterToKandidaten()" title="Klik om alleen kandidaten te tonen">
+        <div class="stat-dot" style="background:var(--accent)"></div>
+        <div class="stat-pill-info">
+          <div class="stat-pill-lbl" style="color:var(--accent)">In aanmerking</div>
+          <div class="stat-pill-sub">Klik om te filteren</div>
+        </div>
+        <div class="stat-pill-val" id="sK" style="color:var(--accent);font-size:24px">—</div>
+      </div>
+
+      <!-- Voortgangsbalk -->
+      <div style="flex:1;min-width:160px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+          <span style="font-size:11px;color:var(--dim);font-weight:500">Voortgang vandaag</span>
+          <span id="voortgang" style="font-size:12px;font-weight:600;color:var(--accent-dark)">0 van 0</span>
+        </div>
+        <div style="height:6px;background:var(--s3);border-radius:3px;overflow:hidden">
+          <div id="voortgangBalk" style="height:100%;background:var(--accent);border-radius:3px;transition:width .4s;width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Verborgen maar aanwezig voor JS-compatibiliteit -->
+      <span id="sP" style="display:none">—</span>
+      <span id="sR" style="display:none">—</span>
+      <span id="sAdh" style="display:none">—</span>
+      <span id="sPeil" style="display:none">—</span>
+
+      <!-- Herhaalinterval — compact -->
+      <div style="display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0">
+        <span style="font-size:11px;color:var(--muted)">Interval:</span>
+        <select id="herhaalInterval" onchange="if(activePid)showDetail(activePid)" style="font-family:var(--mono);font-size:12px;font-weight:600;background:var(--s2);border:1px solid var(--border);border-radius:6px;padding:3px 8px;color:var(--accent-dark)">
           <option value="30">30 dagen</option>
           <option value="60">60 dagen</option>
           <option value="90" selected>90 dagen</option>
@@ -537,12 +711,23 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
     <!-- TOOLBAR -->
     <div class="toolbar">
       <div class="toolbar-left">
-        <div class="tab-bar">
-          <button class="tab-btn active" onclick="switchTab('kandidaten',this)">🏥 Patiënten</button>
-          <button class="tab-btn" onclick="switchTab('middelen',this)">💊 Medicijnen</button>
-          <button class="tab-btn" onclick="switchTab('grafieken',this)">📈 Grafieken</button>
-          <button class="tab-btn" id="tabHuisartsBtn" onclick="switchTab('huisartsen',this)" style="display:none">🏥 Per huisarts</button>
-          <button class="tab-btn" id="tabAfgehandeldBtn" onclick="switchTab('afgehandeld',this)" style="display:none">✅ Afgehandeld <span id="afgehandeldCount" style="background:var(--green);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px">0</span></button>
+        <div style="display:flex;align-items:center;gap:6px">
+          <!-- Primaire tabs: alleen wat de medewerker dagelijks gebruikt -->
+          <div class="tab-bar">
+            <button class="tab-btn active" id="tabKandidatenBtn" onclick="switchTab('kandidaten',this)">🏥 Patiënten</button>
+            <button class="tab-btn" id="tabAfgehandeldBtn" onclick="switchTab('afgehandeld',this)" style="display:none">✅ Klaar <span id="afgehandeldCount" style="background:var(--accent);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px">0</span></button>
+          </div>
+
+          <!-- Meer-menu: beheerder/apotheker tabs -->
+          <div style="position:relative" id="meerMenuWrap">
+            <button class="btn btn-ghost btn-sm" onclick="toggleMeerMenu()" id="meerMenuBtn" style="gap:4px;color:var(--muted);border-color:var(--border)">Meer ▾</button>
+            <div id="meerMenu" style="display:none;position:absolute;top:calc(100%+4px);left:0;background:var(--surf);border:1px solid var(--border);border-radius:8px;min-width:180px;z-index:300;box-shadow:0 4px 16px rgba(0,0,0,.1);overflow:hidden">
+              <button onclick="switchTabMenu('middelen')" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;font-family:var(--sans);color:var(--text);display:flex;align-items:center;gap:8px">💊 Medicijnoverzicht</button>
+              <button onclick="switchTabMenu('grafieken')" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;font-family:var(--sans);color:var(--text);border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">📈 Grafieken</button>
+              <button onclick="switchTabMenu('brieven')" style="width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;font-family:var(--sans);color:var(--text);border-top:1px solid var(--border);display:flex;align-items:center;gap:8px">✉️ Brieven genereren</button>
+              <button id="tabHuisartsBtn" onclick="switchTabMenu('huisartsen')" style="display:none;width:100%;text-align:left;padding:10px 14px;border:none;background:none;cursor:pointer;font-size:12px;font-family:var(--sans);color:var(--text);border-top:1px solid var(--border);align-items:center;gap:8px">🏥 Per huisarts</button>
+            </div>
+          </div>
         </div>
         <input class="search-inp" id="patSearch" placeholder="🔍 Patiëntnummer of medicijn..." oninput="filterPats(this.value)" style="width:220px">
         <!-- Doorzoekbare huisarts combobox -->
@@ -719,6 +904,40 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
       </div>
     </div>
 
+
+    <!-- TAB: BRIEVEN -->
+    <div class="tab-content" id="tab-brieven">
+      <div class="content" style="overflow-y:auto;padding:20px">
+        <div id="briefLeeg" style="display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center">
+          <div style="font-size:48px;margin-bottom:12px">✉️</div>
+          <div style="font-size:16px;font-weight:500;color:var(--dim);margin-bottom:6px">Nog geen patiënten afgehandeld</div>
+          <div style="font-size:13px;color:var(--muted)">Markeer patiënten als "Klaar" om ze hier te zien voor de brieven</div>
+        </div>
+        <div id="briefInhoud" style="display:none">
+          <!-- Dag-selectie knoppen -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:12px;font-weight:500;color:var(--dim);margin-bottom:8px">Selecteer sessie (dag):</div>
+            <div id="briefDagKnoppen" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+          </div>
+          <!-- Sjabloon laden -->
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;padding:12px 16px;background:var(--s2);border-radius:8px;border:1px solid var(--border)">
+            <label for="briefTemplateInput" style="cursor:pointer;display:inline-flex;align-items:center;gap:6px;background:var(--surf);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:12px;font-weight:500;color:var(--dim)">
+              📄 Sjabloon laden
+            </label>
+            <input type="file" id="briefTemplateInput" accept=".docx" style="display:none" onchange="laadBriefSjabloon(event)">
+            <span id="briefSjabloonNaam" style="font-size:12px;color:var(--muted)">Nog geen sjabloon geladen</span>
+            <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+              <span id="briefVerstuurdLabel" style="font-size:12px;font-weight:500"></span>
+              <button id="btnMarkeerVerstuurd" class="btn btn-ghost btn-sm" onclick="markeerBrievenVerstuurd()" style="display:none">✓ Markeer als verstuurd</button>
+              <button id="btnDownloadBrieven" class="btn btn-primary" onclick="downloadBrieven()" disabled style="opacity:.5">📥 Download Word-brieven</button>
+            </div>
+          </div>
+          <!-- Patiënten met medicatieselectie -->
+          <div id="briefPatientenLijst"></div>
+        </div>
+      </div>
+    </div>
+
   </div><!-- /dashboard -->
 </div><!-- /main-area -->
 </div><!-- /app -->
@@ -741,6 +960,42 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
 </div>
 
 <div id="analyseLoader"><div class="loader-spin"></div><span>Analyse bezig…</span></div>
+
+<!-- BESTAND LAAD OVERLAY -->
+<div id="laadOverlay">
+  <div class="lo-card">
+    <div class="lo-icon">📂</div>
+    <div class="lo-bestand" id="loBestand">bestand.txt</div>
+    <div class="lo-meta" id="loMeta">Bezig met laden…</div>
+    <!-- Fasen -->
+    <div class="lo-fasen">
+      <div class="lo-fase">
+        <div class="lo-fase-dot actief" id="loDot1">1</div>
+        <div class="lo-fase-lbl actief" id="loLbl1">Lezen</div>
+      </div>
+      <div class="lo-lijn-wrap"><div class="lo-lijn" id="loLijn1"></div></div>
+      <div class="lo-fase">
+        <div class="lo-fase-dot" id="loDot2">2</div>
+        <div class="lo-fase-lbl" id="loLbl2">Parsen</div>
+      </div>
+      <div class="lo-lijn-wrap"><div class="lo-lijn" id="loLijn2"></div></div>
+      <div class="lo-fase">
+        <div class="lo-fase-dot" id="loDot3">3</div>
+        <div class="lo-fase-lbl" id="loLbl3">Analyseren</div>
+      </div>
+    </div>
+    <!-- Progress bar -->
+    <div class="lo-balk-wrap"><div class="lo-balk" id="loBalk"></div></div>
+    <div class="lo-stats">
+      <span class="lo-rows" id="loRows">0 regels</span>
+      <span class="lo-tijd" id="loTijd">— s</span>
+    </div>
+    <div class="lo-tip">
+      Grote bestanden (80+ MB) kunnen 30–60 seconden duren.<br>
+      Alle gegevens worden lokaal in uw browser verwerkt.
+    </div>
+  </div>
+</div>
 <div class="notify ok" id="notify"></div>
 
 <script>
@@ -751,7 +1006,7 @@ function handleDrop(e){e.preventDefault();document.getElementById('uploadZone').
 // ═══════════════════════════════════════════
 // CONFIGURATIE & CONSTANTEN
 // ═══════════════════════════════════════════
-const C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18};
+const C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18,naamPartner:20,naamPat:21,adres:22,postcode:23,woonplaats:24};
 
 const ATC_N={'A':'Maag/Metabolisme','B':'Bloed','C':'Cardiovasculair','D':'Dermatologie','G':'Urogenitaal','H':'Hormonen','J':'Anti-infectieus','L':'Oncologie','M':'Bewegingsapparaat','N':'Zenuwstelsel','P':'Antiparasitica','R':'Luchtwegen','S':'Zintuigen','V':'Diversen'};
 
@@ -842,8 +1097,11 @@ function debouncedReanalyse(){
   _reanalyseTimer=setTimeout(()=>{if(rawRows.length)runAnalysis();},280);
 }
 let selectedPids=new Set(), donePids=new Set(), notes={};
+let doneTimestamps={};  // {pid: 'YYYY-MM-DD'}
+let briefVerstuurd={};   // {'YYYY-MM-DD': true} — brieven verstuurd per dag
 let activePid=null;
 let showOnlyKandidaten=true;  // standaard: alleen kandidaten tonen
+let _laadOverlayPending=false; // true = overlay actief tijdens initieel laden
 
 // ═══════════════════════════════════════════
 // SIDEBAR TOGGLE
@@ -955,15 +1213,191 @@ function loadDemo(){
 }
 
 // ═══════════════════════════════════════════
+// LAAD OVERLAY
+// ═══════════════════════════════════════════
+let _loStartTs=0, _loTimer=null;
+
+function showLaadOverlay(bestand, grootte){
+  _loStartTs=Date.now();
+  clearInterval(_loTimer);
+  document.getElementById('loBestand').textContent=bestand;
+  document.getElementById('loMeta').textContent=
+    grootte?(fmtBytes(grootte)+' — bezig met lezen…'):'Bezig met laden…';
+  document.getElementById('loBalk').style.width='0%';
+  document.getElementById('loBalk').classList.remove('klaar');
+  document.getElementById('loRows').textContent='0 regels';
+  document.getElementById('loTijd').textContent='0s';
+  // Reset fasen
+  [1,2,3].forEach(i=>{
+    const dot=document.getElementById('loDot'+i);
+    const lbl=document.getElementById('loLbl'+i);
+    if(!dot||!lbl)return;
+    dot.className='lo-fase-dot'+(i===1?' actief':'');
+    dot.textContent=String(i);
+    lbl.className='lo-fase-lbl'+(i===1?' actief':'');
+  });
+  [1,2].forEach(i=>{const l=document.getElementById('loLijn'+i);if(l)l.classList.remove('klaar');});
+  document.getElementById('laadOverlay').style.display='flex';
+  // Elapsed timer
+  _loTimer=setInterval(()=>{
+    const s=Math.round((Date.now()-_loStartTs)/1000);
+    const el=document.getElementById('loTijd');
+    if(el)el.textContent=s+'s';
+  },500);
+}
+
+function updateLaadOverlay(fase, pct, rows){
+  // fase: 1=lezen, 2=parsen, 3=analyseren, 4=klaar
+  const balk=document.getElementById('loBalk');
+  if(balk)balk.style.width=Math.min(100,Math.round(pct))+'%';
+  if(rows!==undefined){
+    const el=document.getElementById('loRows');
+    if(el)el.textContent=rows.toLocaleString('nl-NL')+' regels';
+  }
+  const labels=['','Bestand lezen…','Regels parsen…','Patiënten analyseren…','✓ Klaar'];
+  const meta=document.getElementById('loMeta');
+  if(meta&&fase<=4)meta.textContent=labels[fase]||'';
+  // Fase-dots bijwerken
+  [1,2,3].forEach(i=>{
+    const dot=document.getElementById('loDot'+i);
+    const lbl=document.getElementById('loLbl'+i);
+    if(!dot||!lbl)return;
+    if(i<fase){
+      dot.className='lo-fase-dot klaar';dot.textContent='✓';
+      lbl.className='lo-fase-lbl klaar';
+    } else if(i===fase){
+      dot.className='lo-fase-dot actief';dot.textContent=String(i);
+      lbl.className='lo-fase-lbl actief';
+    } else {
+      dot.className='lo-fase-dot';dot.textContent=String(i);
+      lbl.className='lo-fase-lbl';
+    }
+  });
+  // Verbindingslijnen
+  [1,2].forEach(i=>{
+    const l=document.getElementById('loLijn'+i);
+    if(l)l.classList.toggle('klaar',fase>i+1||(fase===i+1&&i===1&&false));
+    // lijn i is klaar als fase > i+1 of fase is al voorbij i
+    if(l)l.classList.toggle('klaar',fase>i+1);
+  });
+}
+
+function hideLaadOverlay(){
+  clearInterval(_loTimer);
+  const s=Math.round((Date.now()-_loStartTs)/1000);
+  const balk=document.getElementById('loBalk');
+  if(balk){balk.style.width='100%';balk.classList.add('klaar');}
+  const meta=document.getElementById('loMeta');
+  if(meta)meta.textContent='✓ Geladen in '+s+' seconde'+(s!==1?'n':'');
+  updateLaadOverlay(4,100);
+  setTimeout(()=>{
+    const el=document.getElementById('laadOverlay');
+    if(el)el.style.display='none';
+  },700);
+}
+
+function fmtBytes(b){
+  if(b<1048576)return(b/1024).toFixed(1)+' KB';
+  return(b/1048576).toFixed(1)+' MB';
+}
+
+// Yield aan event loop zodat de UI kan bijwerken
+function tick(){return new Promise(r=>setTimeout(r,0));}
+
+// ═══════════════════════════════════════════
+// ASYNC PARSER MET VOORTGANG
+// ═══════════════════════════════════════════
+async function parseTxtAsync(text, onProgress){
+  // Stap A: normaliseer regeleinden
+  text=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const lines=text.split('\n');
+  const totalLines=lines.length;
+
+  // Stap B: combineer meerregelige records (array-join is sneller dan string-concat)
+  const combined=[];
+  let curParts=[];
+  const rs=/^"\s*\d+\s*",/;
+  const CHUNK_A=20000;
+
+  for(let i=0;i<lines.length;i++){
+    const l=lines[i];
+    if(rs.test(l)&&curParts.length){
+      combined.push(curParts.join('\n'));
+      curParts=[l];
+    } else {
+      curParts.push(l);
+    }
+    if(i>0&&i%CHUNK_A===0){
+      const pct=(i/totalLines)*40; // 0–40% van totaal
+      onProgress({pct,rows:combined.length});
+      await tick();
+    }
+  }
+  if(curParts.length&&curParts.join('').trim())combined.push(curParts.join('\n'));
+  onProgress({pct:40,rows:combined.length});
+  await tick();
+
+  // Stap C: parse elk record met PapaParse (40–100% van totaal)
+  const rows=[];
+  const CHUNK_B=3000;
+
+  for(let i=0;i<combined.length;i++){
+    const block=combined[i];
+    if(!block.trim())continue;
+    const res=Papa.parse(block,{quoteChar:'"',skipEmptyLines:false});
+    if(!res.data||!res.data[0])continue;
+    const cols=res.data.flat();
+    if(cols.length<17)continue;
+    rows.push(cols.map(c=>(c||'').toString().trim()));
+    if(i>0&&i%CHUNK_B===0){
+      const pct=40+(i/combined.length)*60; // 40–100%
+      onProgress({pct,rows:rows.length});
+      await tick();
+    }
+  }
+  return rows;
+}
+
+// ═══════════════════════════════════════════
 // FILE HANDLING
 // ═══════════════════════════════════════════
 function processFile(file){
   if(!file)return;
+  // Toon overlay meteen
+  showLaadOverlay(file.name, file.size);
+  updateLaadOverlay(1, 2);
+
   const r=new FileReader();
-  r.onload=e=>{
-    const parsed=parseTxt(e.target.result);
+
+  // FileReader progress → fase 1 (0–15%)
+  r.onprogress=function(e){
+    if(e.lengthComputable){
+      const pct=(e.loaded/e.total)*15;
+      updateLaadOverlay(1,pct);
+    }
+  };
+
+  r.onload=async function(e){
+    updateLaadOverlay(1,15);
+    await tick();
+
+    // Fase 2: parsen (15–85%)
+    updateLaadOverlay(2,15);
+    let parsed;
+    try{
+      parsed=await parseTxtAsync(e.target.result,function(info){
+        const overallPct=15+info.pct*0.70; // 15→85%
+        updateLaadOverlay(2,overallPct,info.rows);
+      });
+    }catch(err){
+      hideLaadOverlay();
+      notify('Fout bij parsen: '+err.message,'info');
+      return;
+    }
+
     const validatie=valideerBestand(parsed,file.name);
     if(validatie.errors.length>0){
+      hideLaadOverlay();
       showFileError(validatie.errors,validatie.warnings,file.name);
       if(validatie.fatal)return;
     }
@@ -971,12 +1405,29 @@ function processFile(file){
     document.getElementById('fileInfo').textContent=file.name+' — '+rawRows.length.toLocaleString('nl-NL')+' regels';
     document.getElementById('fileInfo').style.display='block';
     updateBestandsInfo(file.name);
+
+    // Fase 3: analyse
+    updateLaadOverlay(3,85,rawRows.length);
+    await tick();
+
+    mergedFiles=[];
+    document.getElementById('mergeInfo').style.display='none';
+    document.getElementById('mergeSection').style.display='block';
+    buildAtcToggles();
+    _laadOverlayPending=true;
+    runAnalysis();
+
     if(validatie.warnings.length>0)
       notify('⚠️ Geladen met waarschuwingen — '+rawRows.length.toLocaleString('nl-NL')+' regels','info');
     else
       notify('✓ Geladen: '+rawRows.length.toLocaleString('nl-NL')+' receptregels');
-    buildAtcToggles();runAnalysis();
   };
+
+  r.onerror=function(){
+    hideLaadOverlay();
+    notify('Fout bij lezen van bestand','info');
+  };
+
   r.readAsText(file,'utf-8');
 }
 
@@ -1100,7 +1551,22 @@ function resetWhitelist(){
 // ═══════════════════════════════════════════
 // ANALYSE
 // ═══════════════════════════════════════════
-function getCrit(){return{minM:+document.getElementById('sMonths').value,minP:+document.getElementById('sPresc').value,margin:+document.getElementById('sMargin').value,reqF:document.getElementById('togDose').checked,onlyVU:document.getElementById('togVU').checked,exclOZ:document.getElementById('togExcl').checked,maxInactief:+(document.getElementById('sInactief')?.value||180)};}
+function getCrit(){
+  const patroon=document.getElementById('togPatroon')?.checked||false;
+  const patroonOpties=document.getElementById('patroonOpties');
+  if(patroonOpties)patroonOpties.style.display=patroon?'block':'none';
+  return{
+    minM:+document.getElementById('sMonths').value,
+    minP:+document.getElementById('sPresc').value,
+    margin:+document.getElementById('sMargin').value,
+    reqF:document.getElementById('togDose').checked,
+    onlyVU:document.getElementById('togVU').checked,
+    exclOZ:document.getElementById('togExcl').checked,
+    maxInactief:+(document.getElementById('sInactief')?.value||180),
+    patroonDetectie:patroon,
+    maxCV:+(document.getElementById('sCV')?.value||30)
+  };
+}
 // ── Lazy render helper ──
 function renderDirtyTab(tab){
   if(tab==='meds'&&dirtyTabs.meds){renderMedsTable();dirtyTabs.meds=false;}
@@ -1122,7 +1588,12 @@ function runAnalysis(){
   const doRun=()=>{
     if(_workerBusy){_pendingAnalyse=doRun;return;}
     _workerBusy=true;
-    document.getElementById('analyseLoader').style.display='flex';
+    // Toon kleine loader bij her-analyse; update overlay bij initieel laden
+    if(_laadOverlayPending){
+      updateLaadOverlay(3,87);
+    } else {
+      document.getElementById('analyseLoader').style.display='flex';
+    }
     worker.postMessage({
       rawRows,
       crit:c,
@@ -1202,6 +1673,49 @@ function runAnalysisSync(){
     if(datum)grps[key].entries.push({date:new Date(datum),datum,aantal,uitg,herk});
   });
 
+  // ── Patroondetectie: voeg medicijnen toe op basis van ophaalritmiek ──
+  if(c.patroonDetectie){
+    // Groepeer ALLE rijen opnieuw puur op pid|atc|sterkte maar zonder dkode-filter
+    const patroonGrps={};
+    rawRows.forEach(r=>{
+      const pid=(r[C.pid]||'').trim(),atc=(r[C.atc]||'').trim(),naam=(r[C.naam]||'').trim();
+      const dist=(r[C.dist]||'').trim(),herk=(r[C.herk]||'').trim(),uitg=(r[C.uitg]||'').trim();
+      const dkode=(r[C.dkode]||'').trim(),datum=(r[C.datum]||'').trim(),aantal=parseInt(r[C.aantal]||'0')||0;
+      if(!atc||atc==='0'||!naam||!pid||!datum)return;
+      if(dist!=='N'||herk==='D')return;
+      if(isBlacklisted(atc)||isUitgesloten(atc,naam))return;
+      if(c.exclOZ&&(herk==='Z'||uitg==='ONB'))return;
+      const a3=atc.slice(0,3).toUpperCase();
+      if(atcEnabled[a3]===false)return;
+      const patTs=patLaatst[pid]||0;
+      if(Math.round((peilDatum.getTime()-patTs)/864e5)>maxInactief)return;
+      const sterkte=extractSterkte(naam);
+      const key=pid+'|'+atc+'|'+sterkte;
+      if(!patroonGrps[key])patroonGrps[key]={pid,atc,naam,sterkte,namen:new Set(),dkodes:[],entries:[]};
+      patroonGrps[key].namen.add(naam);
+      if(!patroonGrps[key].dkodes.includes(dkode))patroonGrps[key].dkodes.push(dkode);
+      patroonGrps[key].entries.push({date:new Date(datum),datum,aantal,uitg,herk});
+    });
+
+    // Voeg toe aan grps als het medicijn een consistent patroon heeft maar nog niet in grps zit
+    Object.entries(patroonGrps).forEach(([key,g])=>{
+      if(grps[key])return; // al in normale analyse
+      if(g.entries.length<c.minP)return;
+      g.entries.sort((a,b)=>a.date-b.date);
+      const dates=g.entries.map(e=>e.date);
+      const intervallen=[];
+      for(let i=1;i<dates.length;i++)intervallen.push((dates[i]-dates[i-1])/864e5);
+      if(!intervallen.length)return;
+      const gem=intervallen.reduce((a,b)=>a+b,0)/intervallen.length;
+      if(gem<20||gem>150)return; // alleen maandelijks t/m ~5-maandelijks
+      const std=Math.sqrt(intervallen.map(v=>(v-gem)**2).reduce((a,b)=>a+b,0)/intervallen.length);
+      const cv=(std/gem)*100;
+      if(cv>c.maxCV)return; // te wisselend
+      // Goed patroon gevonden — voeg toe met patroon-markering
+      grps[key]={...g,isPatroon:true,gemInterval:Math.round(gem),cvPct:Math.round(cv)};
+    });
+  }
+
   analysis=Object.values(grps).map(g=>{
     g.entries.sort((a,b)=>a.date-b.date);
     const dates=g.entries.map(e=>e.date);
@@ -1224,7 +1738,29 @@ function runAnalysisSync(){
     const lastDate=dates[dates.length-1];
     const reden=redenAfwijzing(count,months,fixedDose,c,status);
     const duurSignaal=months>=12?'stabiel':months<=1?'kort':'';
-    return{...g,naam:weergaveNaam,aantalMerken,months,fixedDose,count,mainDkode,daily,adh,atcGrp,score,status,reden,duurSignaal,topHerk,dates,aantallen,isWL,lastDate,entries:g.entries};
+
+    // ── SIGNAAL #6: Afbouwtraject ──
+    // Als hoeveelheden consistent dalen over de laatste 3+ verstrekkingen → afbouw
+    let isAfbouw=false;
+    if(aantallen.length>=3){
+      const laatste=aantallen.slice(-4);
+      let dalend=0;
+      for(let i=1;i<laatste.length;i++) if(laatste[i]<laatste[i-1]) dalend++;
+      if(dalend>=laatste.length-1) isAfbouw=true;
+    }
+
+    // ── SIGNAAL #8: Dosiswijziging ──
+    const sterkteRe=/(\d+(?:[.,]\d+)?)\s*(MCG|MG|G|ML|IE|%)/i;
+    const uniekSterktes=new Set();
+    if(g.namen&&g.namen.size>0){
+      g.namen.forEach(n=>{const mm=n.match(sterkteRe);if(mm)uniekSterktes.add(mm[0].toUpperCase());});
+    }
+    const sterkteWijziging=uniekSterktes.size>1?(()=>{
+      const gesorteerd=[...uniekSterktes].sort();
+      return gesorteerd[0]+' → '+gesorteerd[gesorteerd.length-1];
+    })():null;
+
+    return{...g,naam:weergaveNaam,aantalMerken,months,fixedDose,count,mainDkode,daily,adh,atcGrp,score,status,reden,duurSignaal,topHerk,dates,aantallen,isWL,lastDate,entries:g.entries,isPatroon:!!g.isPatroon,gemInterval:g.gemInterval||null,cvPct:g.cvPct||null,isAfbouw,sterkteWijziging:sterkteWijziging||null};
   }).filter(m=>m.naam);
 
   cachedPatSumm=buildPatSumm();
@@ -1296,6 +1832,9 @@ function buildPatSumm(){
     p.avgAdh=p.adhScores.length?Math.round(p.adhScores.reduce((a,b)=>a+b,0)/p.adhScores.length):null;
     p.kandidaat=p.aanb>=1?'sterk':p.overw>=1?'mogelijk':'niet';
     p.sortScore=p.aanb*40+(p.avgAdh||0)*.5+p.overw*5;
+    // NAW: pak eerste rij voor deze patiënt met adresgegevens
+    const nawRij=rawRows.find(r=>(r[C.pid]||'').trim()===p.pid&&r[C.naamPat]);
+    p.naw=nawRij?{naam:(nawRij[C.naamPat]||'').trim(),adres:(nawRij[C.adres]||'').trim(),postcode:(nawRij[C.postcode]||'').trim(),woonplaats:(nawRij[C.woonplaats]||'').trim()}:null;
     // Punt 4: check dubbele ATC-groepen (mogelijke dubbele therapie)
     const atcGrpCount={};
     p.meds.filter(m=>m.status==='Aanbevolen'||m.status==='Overwegen').forEach(m=>{
@@ -1305,6 +1844,9 @@ function buildPatSumm(){
     p.dubbelTherapie=Object.entries(atcGrpCount)
       .filter(([,namen])=>namen.length>1)
       .map(([grp,namen])=>({grp,namen}));
+    // Aggregeer signalen over alle medicijnen van de patiënt
+    p.afbouwMeds=p.meds.filter(m=>m.isAfbouw).map(m=>m.naam);
+    p.sterkteWijzigingen=p.meds.filter(m=>m.sterkteWijziging).map(m=>({naam:m.naam,wijziging:m.sterkteWijziging}));
     // Idee 3: check of laatste verstrekking >90 dagen geleden
     const nu=new Date();
     const dagsSindsLaatst=p.lastDate?Math.round((nu-p.lastDate)/864e5):999;
@@ -1318,6 +1860,11 @@ function buildPatSumm(){
 // RENDER ALLES
 // ═══════════════════════════════════════════
 function renderAll(){
+  // Sluit laad-overlay als we komen vanuit initieel bestand laden
+  if(_laadOverlayPending){
+    hideLaadOverlay();
+    _laadOverlayPending=false;
+  }
   document.getElementById('emptyState').style.display='none';
   const db=document.getElementById('dashboard');
   db.style.display='flex';
@@ -1327,7 +1874,7 @@ function renderAll(){
   const aanb=analysis.filter(r=>r.status==='Aanbevolen').length;
   const adhAll=analysis.filter(r=>r.adh.pct!==null).map(r=>r.adh.pct);
   const avgAdh=adhAll.length?Math.round(adhAll.reduce((a,b)=>a+b,0)/adhAll.length):null;
-  const kandPats=getPatSumm().filter(p=>p.aanb>=1).length;
+  const kandPats=getPatSumm().filter(p=>p.aanb>=1||p.overw>=1).length;
   const allDates=rawRows.map(r=>r[C.datum]).filter(Boolean).sort();
   const peilDate=allDates[allDates.length-1]||'—';
 
@@ -1493,32 +2040,49 @@ function renderPatList(search=''){
     // Medicijn-chips met therapietrouw, gesorteerd hoog→laag, max 4
     const aanbMeds=p.meds.filter(m=>m.status==='Aanbevolen'||m.status==='Overwegen')
       .sort((a,b)=>(b.adh.pct??-1)-(a.adh.pct??-1)).slice(0,4);
+    // Zet medicijnnaam om naar leesbare kapitalisatie (Title Case)
+    function toTitleCase(naam){
+      return naam.toLowerCase().replace(/(\w)/g,c=>c.toUpperCase());
+    }
     const medChips=aanbMeds.map(m=>{
       const pct=m.adh.pct;
-      const col=pct===null?'var(--muted)':pct>=80?'var(--green)':pct>=60?'var(--amber)':'var(--red)';
-      const bg=pct===null?'rgba(100,116,139,.08)':pct>=80?'rgba(5,150,105,.08)':pct>=60?'rgba(217,119,6,.08)':'rgba(220,38,38,.08)';
-      const border=pct===null?'rgba(100,116,139,.2)':pct>=80?'rgba(5,150,105,.25)':pct>=60?'rgba(217,119,6,.25)':'rgba(220,38,38,.25)';
-      const kort=m.naam.split(' ').slice(0,2).join(' ');
-      const pctStr=pct!==null?pct+'%':'—';
       const isOverw=m.status==='Overwegen';
-      return '<span style="display:inline-flex;align-items:center;gap:3px;background:'+bg+';border:1px solid '+border+';border-radius:4px;padding:1px 6px;font-size:10px;white-space:nowrap">'
-        +(isOverw?'<span style="color:var(--amber);font-size:9px">⚠</span>':'')
-        +'<span style="color:var(--text)">'+kort+'</span>'
-        +'<span style="font-family:var(--mono);font-weight:600;color:'+col+'">'+pctStr+'</span>'
-        +'</span>';
+      // Leesbare naam: Title Case, eerste 3 woorden
+      const leesbaar=toTitleCase(m.naam.split(' ').slice(0,2).join(' '));
+      // Patroon-medicijn: aparte weergave
+      if(m.isPatroon){
+        const intervalStr=m.gemInterval?'~'+m.gemInterval+'d':'patroon';
+        return '<div style="display:inline-flex;align-items:center;gap:5px;background:rgba(99,102,241,.07);border:1px solid rgba(99,102,241,.25);border-radius:7px;padding:5px 10px;font-size:13px">'
+          +'<span style="font-size:11px">📊</span>'
+          +(isOverw?'<span style="color:var(--amber);font-size:10px">⚠</span>':'')
+          +'<span style="color:var(--text);font-weight:500">'+leesbaar+'</span>'
+          +'<span style="font-family:var(--mono);font-weight:700;font-size:12px;color:rgba(99,102,241,1)">'+intervalStr+'</span>'
+          +'</div>';
+      }
+      const col=pct===null?'var(--muted)':pct>=80?'#059669':pct>=60?'#b45309':'#dc2626';
+      const bg=pct===null?'rgba(100,116,139,.06)':pct>=80?'rgba(5,150,105,.07)':pct>=60?'rgba(217,119,6,.07)':'rgba(220,38,38,.07)';
+      const border=pct===null?'rgba(100,116,139,.2)':pct>=80?'rgba(5,150,105,.2)':pct>=60?'rgba(217,119,6,.2)':'rgba(220,38,38,.2)';
+      const pctStr=pct!==null?pct+'%':'—';
+      return '<div style="display:inline-flex;align-items:center;gap:6px;background:'+bg+';border:1px solid '+border+';border-radius:7px;padding:5px 10px;font-size:13px">'
+        +(isOverw?'<span style="color:var(--amber);font-size:10px">⚠</span>':'')
+        +'<span style="color:var(--text);font-weight:500">'+leesbaar+'</span>'
+        +'<span style="font-family:var(--mono);font-weight:700;font-size:12px;color:'+col+'">'+pctStr+'</span>'
+        +'</div>';
     }).join('');
     return`<div class="pat-item${isActive?' active':''}${isDone?' done':''}" id="pi-${p.pid}" onclick="showDetail('${p.pid}')">
       <input type="checkbox" class="pat-cb" ${isSel?'checked':''} onclick="toggleSel(event,'${p.pid}')" title="Selecteer voor kopiëren">
       <div class="pat-main">
         <div class="pat-num">${p.pid} ${kBadge} ${polyBadge}${notes[p.pid]?'<span style="font-size:11px;margin-left:4px" title="Notitie aanwezig">📝</span>':''}</div>
         <div class="pat-sub" style="flex-direction:column;align-items:flex-start;gap:3px">
-          ${medChips?`<div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:1px">${medChips}</div>`:''}
+          ${medChips?`<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px">${medChips}</div>`:''}
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             ${lastD?`<span>📅 ${lastD}</span>`:''}
             ${p.huisarts?`<span style="color:var(--muted)">🧑‍⚕️ ${p.huisarts}</span>`:''}
             ${p.kandidaat==='niet'&&redenTip?`<span style="color:var(--red);font-size:10px">${redenTip}</span>`:''}
             ${p.oudeData&&p.kandidaat!=='niet'?`<span style="color:var(--amber);font-size:10px">⚠ ${p.dagsSindsLaatst}d geleden</span>`:''}
             ${p.dubbelTherapie&&p.dubbelTherapie.length>0?'<span style="color:var(--purple);font-size:10px">⚠ Dubbele therapie</span>':''}
+            ${p.afbouwMeds&&p.afbouwMeds.length>0?'<span style="color:#7c3aed;font-size:10px" title="Mogelijk afbouwtraject: '+p.afbouwMeds.join(', ')+'">📉 Afbouw?</span>':''}
+            ${p.sterkteWijzigingen&&p.sterkteWijzigingen.length>0?'<span style="color:#059669;font-size:10px" title="Dosiswijziging: '+p.sterkteWijzigingen.map(s=>s.naam+' '+s.wijziging).join(', ')+'">⚡ Dosiswijziging</span>':''}
           </div>
         </div>
       </div>
@@ -1530,15 +2094,19 @@ function renderPatList(search=''){
   }).join('');
 
   updateCopyPanel();
-  // Voortgang teller: hoeveel kandidaten zijn afgehandeld (inclusief de nu verborgen)
-  const vEl=document.getElementById('voortgang');
-  if(vEl&&patSumms.length>0){
+  // Voortgangsbalk bijwerken
+  {
     const allKand=patSumms.filter(p=>p.aanb>=1||p.overw>=1);
     const doneKand=allKand.filter(p=>donePids.has(p.pid)).length;
     const total=allKand.length;
-    vEl.style.display=total>0?'inline':'none';
-    vEl.textContent=doneKand+' van '+total+' verwerkt';
-    vEl.style.color=doneKand===total&&total>0?'var(--green)':'var(--muted)';
+    const vEl=document.getElementById('voortgang');
+    const balk=document.getElementById('voortgangBalk');
+    if(vEl)vEl.textContent=doneKand+' van '+total+' verwerkt';
+    if(balk){
+      const pct=total>0?Math.round(doneKand/total*100):0;
+      balk.style.width=pct+'%';
+      balk.style.background=doneKand===total&&total>0?'var(--green)':'var(--accent)';
+    }
   }
 }
 
@@ -1574,11 +2142,13 @@ function toggleSel(e,pid){
 
 function toggleDone(e,pid){
   e.stopPropagation();
-  if(donePids.has(pid))donePids.delete(pid);else donePids.add(pid);
+  const vandaag=new Date().toISOString().slice(0,10);
+  if(donePids.has(pid)){donePids.delete(pid);delete doneTimestamps[pid];}else{donePids.add(pid);doneTimestamps[pid]=vandaag;}
   saveSession();
   dirtyTabs.afgehandeld=true;
   renderPatList();
   if(activeTab==='afgehandeld')renderDirtyTab('afgehandeld');
+  if(activeTab==='brieven')renderBrievenTab();
 }
 
 function selectAllKandidaten(){
@@ -1590,7 +2160,8 @@ function selectAllKandidaten(){
 function deselectAll(){selectedPids.clear();renderPatList();document.getElementById('selCount').textContent='0 geselecteerd';document.getElementById('markDoneBtn').style.display='none';}
 
 function markSelectedDone(){
-  selectedPids.forEach(pid=>donePids.add(pid));
+  const ts=new Date().toISOString().slice(0,10);
+  selectedPids.forEach(pid=>{donePids.add(pid);doneTimestamps[pid]=ts;});
   selectedPids.clear();
   renderPatList();
   document.getElementById('markDoneBtn').style.display='none';
@@ -1750,16 +2321,18 @@ function renderSyncPanel(meds, herhaalInterval) {
 
   // ── Tabelrijen: Geneesmiddel | Dosering | Hoeveelheid overbrugging | Startdatum overbrugging | Synchronisatiedatum ──
   const rows = plan.meds.map(m => {
-    // Kolom 1: Geneesmiddel + voorraaddagen
+    // Kolom 1: Geneesmiddel + voorraaddagen + patroon-label
     const nu=new Date();
     const voorraadDagen=m.endDate?Math.round((m.endDate-nu)/864e5):null;
     const voorraadStr=voorraadDagen===null?''
       :voorraadDagen<=0?'<div style="font-size:11px;color:var(--red);margin-top:3px;font-weight:500">⚠ Voorraad op</div>'
       :voorraadDagen<=7?'<div style="font-size:11px;color:var(--amber);margin-top:3px;font-weight:500">⚠ Nog '+voorraadDagen+' dag'+(voorraadDagen!==1?'en':'')+' voorraad</div>'
       :'<div style="font-size:11px;color:var(--muted);margin-top:3px">Nog '+voorraadDagen+' dagen voorraad</div>';
+    const patroonLabel=m.isPatroon?'<div style="font-size:10px;color:rgba(99,102,241,1);margin-top:3px;display:flex;align-items:center;gap:4px"><span>📊</span><span>Patroondetectie — interval ~'+m.gemInterval+'d (variatie '+m.cvPct+'%)</span></div>':'';
     const naamHtml = '<div class="sc-naam">'+m.naam+'</div>'
                    + '<div class="sc-sub">ATC: '+m.atc+'</div>'
-                   + voorraadStr;
+                   + voorraadStr
+                   + patroonLabel;
 
     // Kolom 2: Dosering
     const dailyStr = m.daily
@@ -1955,6 +2528,8 @@ function showDetail(pid){
         <div class="detail-meta">${aanb.length} aanbevolen · ${overw.length} te overwegen · ${meds.length} totaal geanalyseerd</div>
         ${euSindsStr?'<div class="detail-meta" style="margin-top:2px">'+euSindsStr+'</div>':''}
         ${p.dubbelTherapie&&p.dubbelTherapie.length>0?`<div style="margin-top:5px;padding:5px 8px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:5px;font-size:11px;color:var(--purple)">⚠ Mogelijk dubbele therapie: ${p.dubbelTherapie.map(d=>'<strong>'+d.grp+'</strong>: '+d.namen.join(' + ')).join(' · ')}</div>`:''}
+        ${p.afbouwMeds&&p.afbouwMeds.length>0?`<div style="margin-top:5px;padding:5px 8px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:5px;font-size:11px;color:#7c3aed">📉 Mogelijk afbouwtraject: <strong>${p.afbouwMeds.join(', ')}</strong> — hoeveelheden nemen af</div>`:''}
+        ${p.sterkteWijzigingen&&p.sterkteWijzigingen.length>0?`<div style="margin-top:5px;padding:5px 8px;background:rgba(5,150,105,.07);border:1px solid rgba(5,150,105,.2);border-radius:5px;font-size:11px;color:#059669">⚡ Dosiswijziging gedetecteerd: ${p.sterkteWijzigingen.map(s=>'<strong>'+s.naam+'</strong> '+s.wijziging).join(' · ')} — bespreek bij aanmelding</div>`:''}
         <div class="detail-meta" style="margin-top:3px">Laatste recept: ${p.lastDate?p.lastDate.toISOString().slice(0,10):'—'}</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
@@ -2115,6 +2690,8 @@ function switchTab(id,el){
   document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+id).classList.add('active');el.classList.add('active');
   activeTab=id;
+  // Reset meer-menu knop stijl als we terug naar primaire tab gaan
+  const mmb=document.getElementById('meerMenuBtn');if(mmb)mmb.classList.remove('active');
   // Lazy render: bouw tab op als dirty
   if(id==='middelen')renderDirtyTab('meds');
   else if(id==='grafieken')renderDirtyTab('grafieken');
@@ -2433,6 +3010,8 @@ function saveSession(){
   try{
     const data={
       donePids:[...donePids],
+      doneTimestamps,
+      briefVerstuurd,
       selectedHuisartsen:[...selectedHuisartsen],
       notes:notes,
       exclusieMeds:[...exclusieMeds],
@@ -2449,13 +3028,17 @@ function restoreSession(){
     if(data.donePids)data.donePids.forEach(p=>donePids.add(p));
     if(data.selectedHuisartsen)data.selectedHuisartsen.forEach(h=>selectedHuisartsen.add(h));
     if(data.notes)Object.assign(notes,data.notes);
+    if(data.doneTimestamps)Object.assign(doneTimestamps,data.doneTimestamps);
+    if(data.briefVerstuurd)Object.assign(briefVerstuurd,data.briefVerstuurd);
     if(data.exclusieMeds)data.exclusieMeds.forEach(m=>exclusieMeds.add(m));
+
   }catch(e){}
 }
 
 function clearSession(){
   try{localStorage.removeItem('herhaalSession');}catch(e){}
   donePids.clear();selectedPids.clear();selectedHuisartsen.clear();
+  doneTimestamps={}; briefVerstuurd={};
   cachedPatSumm=[];
   renderPatList();renderHuisartsTags();
   notify('Sessie gewist','info');
@@ -2668,13 +3251,13 @@ function updateBestandsInfo(naam){
     +(peilDate?'<span style="margin-left:6px;color:var(--muted)">· '+peilDate+oudeDataWarn+'</span>':'');
   // Waarschuwing als bestand ouder dan 60 dagen
   if(ouderDanDagen>60){
-    el.style.borderColor='var(--amber)';
-    el.style.background='rgba(217,119,6,.08)';
-    el.style.color='var(--amber)';
+    el.style.borderColor='rgba(245,158,11,.7)';
+    el.style.background='rgba(245,158,11,.25)';
+    el.style.color='#fff';
   } else {
-    el.style.borderColor='var(--border)';
-    el.style.background='var(--s2)';
-    el.style.color='var(--muted)';
+    el.style.borderColor='rgba(255,255,255,.25)';
+    el.style.background='rgba(255,255,255,.15)';
+    el.style.color='rgba(255,255,255,.85)';
   }
 }
 
@@ -2712,7 +3295,7 @@ function getOpgeslagenHash(){
   try{return localStorage.getItem('appPasswordHash')||APP_PASSWORD_HASH;}catch(e){return APP_PASSWORD_HASH;}
 }
 
-const WORKER_CODE="\n// ── HerhaalModule Analyse Worker v2 ──\n// Merkdeduplicatie: groepeer op pid|atc|sterkte ipv pid|atc|naam\n// Exclusies: handmatig uitgesloten middelen\n// Inactiviteit: patiënten met laatste verstrekking ouder dan maxInactief dagen\n// Continuïteit: gaten >180d tellen niet mee als behandelduur\n\nconst C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18};\nconst ATC_N={'A':'Maag/Metabolisme','B':'Bloed','C':'Cardiovasculair','D':'Dermatologie','G':'Urogenitaal','H':'Hormonen','J':'Anti-infectieus','L':'Oncologie','M':'Bewegingsapparaat','N':'Zenuwstelsel','P':'Antiparasitica','R':'Luchtwegen','S':'Zintuigen','V':'Diversen'};\nconst ATC_WHITELIST={'A02':1,'A10':1,'A11':1,'A12':1,'B01':1,'C02':1,'C03':1,'C07':1,'C08':1,'C09':1,'C10':1,'G03':1,'G04':1,'H03':1,'M04':1,'M05':1,'N03A':1,'N04B':1,'N06A':1,'N06D':1,'R03':1,'V01':1};\nconst ATC_BLACKLIST={'N02A':1,'N06BA':1,'N05B':1,'N05C':1,'N05A':1,'N07BC':1,'N07BB':1,'N01A':1,'N02AB':1,'N02BG':1,'L01':1,'L04':1,'H02':1,'J01':1,'J05':1};\n\nfunction isBlacklisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_BLACKLIST).some(k=>atc.startsWith(k));}\nfunction isWhitelisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_WHITELIST).some(k=>atc.startsWith(k));}\n\nfunction extractSterkte(naam){\n  const m=(naam||'').toUpperCase().match(/(\\d+(?:[,.]\\d+)?)\\s*(MCG|MG|G|ML|IE|MMOL|%)/);\n  return m?m[1].replace(',','.')+m[2]:'';\n}\n\nfunction parseDailyDose(kode){\n  if(!kode)return null;\n  kode=kode.trim().toUpperCase();\n  let fpd=null;\n  const mWr=kode.match(/^(\\d+)-(\\d+)W/);if(mWr){fpd=((+mWr[1])+(+mWr[2]))/2/7;}\n  const mDr=kode.match(/^(\\d+)-(\\d+)D/);if(mDr){fpd=((+mDr[1])+(+mDr[2]))/2;}\n  const mW=kode.match(/^(\\d+(?:\\.\\d+)?)W/);if(mW&&fpd===null){fpd=+mW[1]/7;}\n  const mD=kode.match(/^(\\d+(?:\\.\\d+)?)D/);if(mD&&fpd===null){fpd=+mD[1];}\n  if(fpd===null)return null;\n  let amt=1;\n  const mA=kode.match(/[DW](\\d+(?:\\.\\d+)?)/);if(mA)amt=+mA[1];\n  if(kode.match(/[DW]0\\.5/))amt=0.5;\n  return fpd*amt;\n}\n\nfunction calcAdherence(dates,aantallen,dkode,margin){\n  if(dates.length<2)return{pct:null,onTime:0,miss:0,late:0,events:[]};\n  const daily=parseDailyDose(dkode);\n  const events=[];let onTime=0,miss=0,late=0;\n  dates.forEach((d,i)=>{\n    const ev={date:d,datum:new Date(d).toISOString().slice(0,10),aantal:aantallen[i],type:i===0?'eu':'ok'};\n    if(i>0&&daily){\n      const prev=new Date(dates[i-1]);\n      prev.setDate(prev.getDate()+Math.round(aantallen[i-1]/daily));\n      const cur=new Date(d);\n      const diff=Math.round((cur-prev)/(864e5));\n      ev.diff=diff;ev.expected=prev.toISOString();\n      if(Math.abs(diff)<=margin){ev.type='ok';onTime++;}\n      else if(diff>margin){ev.type='miss';miss++;}\n      else{ev.type='late';late++;}\n    }\n    events.push(ev);\n  });\n  const tot=onTime+miss+late;\n  return{pct:tot>0?Math.round(onTime/tot*100):null,onTime,miss,late,events};\n}\n\nfunction calcContinuousMonths(dates){\n  // Bereken behandelduur rekening houdend met continuïteit\n  // Een gat van >180 dagen = nieuwe episode, tel alleen de meest recente episode\n  if(dates.length<2)return 0;\n  let episodeStart=new Date(dates[0]);\n  for(let i=1;i<dates.length;i++){\n    const gap=Math.round((new Date(dates[i])-new Date(dates[i-1]))/864e5);\n    if(gap>180)episodeStart=new Date(dates[i]); // nieuwe episode na lang gat\n  }\n  const lastD=new Date(dates[dates.length-1]);\n  return Math.round((lastD-episodeStart)/(864e5*30));\n}\n\nfunction calcScore(count,months,fixed,adhPct,hasDose,c,isWL){\n  let s=0;\n  s+=Math.min(count/c.minP,2)*17.5;\n  s+=Math.min(months/c.minM,2)*17.5;\n  if(fixed)s+=8;\n  if(hasDose&&adhPct!==null){\n    s+=Math.round(adhPct*.4);\n    if(adhPct<60)s-=10;\n  } else if(!hasDose){s+=20;}\n  if(isWL)s+=9;\n  return Math.round(Math.min(Math.max(s,0),100));\n}\n\nfunction calcStatus(count,months,fixed,c,score){\n  if(count<c.minP)return'Uitgesloten';\n  if(months<c.minM)return'Uitgesloten';\n  if(c.reqF&&!fixed)return'Wisselende dosering';\n  return score>=55?'Aanbevolen':'Overwegen';\n}\n\nfunction redenAfwijzing(count,months,fixed,c,status){\n  if(status==='Aanbevolen')return null;\n  if(status==='Overwegen')return'Voldoet aan criteria maar score is laag';\n  if(status==='Wisselende dosering')return'Dosering wisselt — niet geschikt';\n  const r=[];\n  if(count<c.minP)r.push('Te weinig herhalingen ('+count+' van '+c.minP+' nodig)');\n  if(months<c.minM)r.push('Te kort onder behandeling ('+months+' van '+c.minM+' maanden)');\n  return r.join(' · ')||'Onvoldoende gegevens';\n}\n\nself.onmessage=function(e){\n  const {rawRows,crit:c,atcEnabled,extraWhitelistMeds,exclusieMeds}=e.data;\n  const extraSet=new Set(extraWhitelistMeds||[]);\n  const exclusieSet=new Set((exclusieMeds||[]).map(s=>s.toLowerCase()));\n  const maxInactief=c.maxInactief||90;\n\n  function isWLorExtra(atc,naam){\n    if(isWhitelisted(atc)&&!isBlacklisted(atc))return true;\n    return extraSet.has((naam||'').toLowerCase());\n  }\n\n  function isUitgesloten(atc,naam){\n    const naamL=(naam||'').toLowerCase();\n    const atcU=(atc||'').toUpperCase();\n    for(const k of exclusieSet){\n      if(naamL.includes(k))return true;\n      if(atcU.startsWith(k.toUpperCase()))return true;\n    }\n    return false;\n  }\n\n  // Bepaal peildatum (meest recente datum in dataset)\n  let peilTs=0;\n  rawRows.forEach(r=>{const d=r[C.datum];if(d){const t=new Date(d).getTime();if(t>peilTs)peilTs=t;}});\n  const peilDatum=peilTs?new Date(peilTs):new Date();\n\n  // Bepaal laatste verstrekking per patiënt voor inactiviteitscheck\n  const patLaatst={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim();\n    const datum=r[C.datum];\n    if(pid&&datum){\n      const t=new Date(datum).getTime();\n      if(!patLaatst[pid]||t>patLaatst[pid])patLaatst[pid]=t;\n    }\n  });\n\n  // Groepeer op pid|atc|sterkte (merkdeduplicatie)\n  const grps={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim(),atc=(r[C.atc]||'').trim(),naam=(r[C.naam]||'').trim();\n    const dist=(r[C.dist]||'').trim(),herk=(r[C.herk]||'').trim(),uitg=(r[C.uitg]||'').trim();\n    const dkode=(r[C.dkode]||'').trim(),datum=(r[C.datum]||'').trim(),aantal=parseInt(r[C.aantal]||'0')||0;\n    if(!atc||atc==='0'||!naam||!pid)return;\n    if(dist!=='N')return;\n    if(herk==='D')return;\n    if(isBlacklisted(atc))return;\n    if(isUitgesloten(atc,naam))return;\n    const dkodeUpper=dkode.toUpperCase();\n    const omschrUpper=(r[9]||'').toUpperCase();\n    if(/\\bZN\\b/.test(dkodeUpper)||omschrUpper.includes('ZO NODIG')||omschrUpper.includes('INDIEN NODIG'))return;\\n    // Variabele dosering (bereik): bijv 1-2D1T, 3-6D1T — niet geschikt voor herhaalservice\\n    if(/^\\\\d+-\\\\d+[DW]/i.test(dkode))return;\n    if(c.exclOZ&&(herk==='Z'||uitg==='ONB'))return;\n    const a3=atc.slice(0,3).toUpperCase();\n    if(atcEnabled[a3]===false)return;\n    // Inactiviteitscheck: sla patiënt over als laatste verstrekking te lang geleden\n    const patTs=patLaatst[pid]||0;\n    const dagsSinds=Math.round((peilDatum.getTime()-patTs)/864e5);\n    if(dagsSinds>maxInactief)return;\n    // Merkdeduplicatie: groepeer op pid|atc|sterkte\n    const sterkte=extractSterkte(naam);\n    const key=pid+'|'+atc+'|'+sterkte;\n    if(!grps[key])grps[key]={pid,atc,naam,sterkte,namen:new Set(),dkodes:[],entries:[]};\n    grps[key].namen.add(naam);\n    if(!grps[key].dkodes.includes(dkode))grps[key].dkodes.push(dkode);\n    if(datum)grps[key].entries.push({date:datum,datum,aantal,uitg,herk});\n  });\n\n  const analysis=Object.values(grps).map(g=>{\n    g.entries.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);\n    const dates=g.entries.map(e=>e.date);\n    const aantallen=g.entries.map(e=>e.aantal);\n    // Gebruik de meest voorkomende naam als weergavenaam\n    const naamFreq={};\n    g.namen.forEach(n=>{naamFreq[n]=(naamFreq[n]||0)+1;});\n    const weergaveNaam=Object.entries(naamFreq).sort((a,b)=>b[1]-a[1])[0]?.[0]||g.naam;\n    const aantalMerken=g.namen.size;\n    const months=calcContinuousMonths(dates);\n    const fixedDose=new Set(g.dkodes).size<=1;\n    const count=g.entries.length;\n    const mainDkode=g.dkodes.filter(d=>d&&d.length>1&&!/^\\d{4}-\\d{2}/.test(d))[0]||'';\n    const daily=parseDailyDose(mainDkode);\n    const adh=calcAdherence(dates,aantallen,mainDkode,c.margin);\n    const atcGrp=ATC_N[g.atc[0]?.toUpperCase()]||g.atc[0]?.toUpperCase()||'';\n    const isWL=isWLorExtra(g.atc,weergaveNaam);\n    const score=calcScore(count,months,fixedDose,adh.pct,!!mainDkode,c,isWL);\n    const status=calcStatus(count,months,fixedDose,c,score);\n    const herkM=g.entries.reduce((a,e)=>{a[e.herk]=(a[e.herk]||0)+1;return a},{});\n    const topHerk=Object.entries(herkM).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';\n    const lastDate=dates[dates.length-1];\n    const reden=redenAfwijzing(count,months,fixedDose,c,status);\n    const duurSignaal=months>=12?'stabiel':months<=1?'kort':'';\n    return{pid:g.pid,atc:g.atc,naam:weergaveNaam,aantalMerken,sterkte:g.sterkte,months,fixedDose,count,mainDkode,daily,adh,atcGrp,score,status,reden,duurSignaal,topHerk,dates,aantallen,isWL,lastDate,entries:g.entries};\n  }).filter(m=>m.naam);\n\n  self.postMessage({analysis});\n};\n";;
+const WORKER_CODE="\n// ── HerhaalModule Analyse Worker v2 ──\n// Merkdeduplicatie: groepeer op pid|atc|sterkte ipv pid|atc|naam\n// Exclusies: handmatig uitgesloten middelen\n// Inactiviteit: patiënten met laatste verstrekking ouder dan maxInactief dagen\n// Continuïteit: gaten >180d tellen niet mee als behandelduur\n\nconst C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18,naamPartner:20,naamPat:21,adres:22,postcode:23,woonplaats:24};\nconst ATC_N={'A':'Maag/Metabolisme','B':'Bloed','C':'Cardiovasculair','D':'Dermatologie','G':'Urogenitaal','H':'Hormonen','J':'Anti-infectieus','L':'Oncologie','M':'Bewegingsapparaat','N':'Zenuwstelsel','P':'Antiparasitica','R':'Luchtwegen','S':'Zintuigen','V':'Diversen'};\nconst ATC_WHITELIST={'A02':1,'A10':1,'A11':1,'A12':1,'B01':1,'C02':1,'C03':1,'C07':1,'C08':1,'C09':1,'C10':1,'G03':1,'G04':1,'H03':1,'M04':1,'M05':1,'N03A':1,'N04B':1,'N06A':1,'N06D':1,'R03':1,'V01':1};\nconst ATC_BLACKLIST={'N02A':1,'N06BA':1,'N05B':1,'N05C':1,'N05A':1,'N07BC':1,'N07BB':1,'N01A':1,'N02AB':1,'N02BG':1,'L01':1,'L04':1,'H02':1,'J01':1,'J05':1};\n\nfunction isBlacklisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_BLACKLIST).some(k=>atc.startsWith(k));}\nfunction isWhitelisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_WHITELIST).some(k=>atc.startsWith(k));}\n\nfunction extractSterkte(naam){\n  const m=(naam||'').toUpperCase().match(/(\\d+(?:[,.]\\d+)?)\\s*(MCG|MG|G|ML|IE|MMOL|%)/);\n  return m?m[1].replace(',','.')+m[2]:'';\n}\n\nfunction parseDailyDose(kode){\n  if(!kode)return null;\n  kode=kode.trim().toUpperCase();\n  let fpd=null;\n  const mWr=kode.match(/^(\\d+)-(\\d+)W/);if(mWr){fpd=((+mWr[1])+(+mWr[2]))/2/7;}\n  const mDr=kode.match(/^(\\d+)-(\\d+)D/);if(mDr){fpd=((+mDr[1])+(+mDr[2]))/2;}\n  const mW=kode.match(/^(\\d+(?:\\.\\d+)?)W/);if(mW&&fpd===null){fpd=+mW[1]/7;}\n  const mD=kode.match(/^(\\d+(?:\\.\\d+)?)D/);if(mD&&fpd===null){fpd=+mD[1];}\n  if(fpd===null)return null;\n  let amt=1;\n  const mA=kode.match(/[DW](\\d+(?:\\.\\d+)?)/);if(mA)amt=+mA[1];\n  if(kode.match(/[DW]0\\.5/))amt=0.5;\n  return fpd*amt;\n}\n\nfunction calcAdherence(dates,aantallen,dkode,margin){\n  if(dates.length<2)return{pct:null,onTime:0,miss:0,late:0,events:[]};\n  const daily=parseDailyDose(dkode);\n  const events=[];let onTime=0,miss=0,late=0;\n  dates.forEach((d,i)=>{\n    const ev={date:d,datum:new Date(d).toISOString().slice(0,10),aantal:aantallen[i],type:i===0?'eu':'ok'};\n    if(i>0&&daily){\n      const prev=new Date(dates[i-1]);\n      prev.setDate(prev.getDate()+Math.round(aantallen[i-1]/daily));\n      const cur=new Date(d);\n      const diff=Math.round((cur-prev)/(864e5));\n      ev.diff=diff;ev.expected=prev.toISOString();\n      if(Math.abs(diff)<=margin){ev.type='ok';onTime++;}\n      else if(diff>margin){ev.type='miss';miss++;}\n      else{ev.type='late';late++;}\n    }\n    events.push(ev);\n  });\n  const tot=onTime+miss+late;\n  return{pct:tot>0?Math.round(onTime/tot*100):null,onTime,miss,late,events};\n}\n\nfunction calcContinuousMonths(dates){\n  // Bereken behandelduur rekening houdend met continuïteit\n  // Een gat van >180 dagen = nieuwe episode, tel alleen de meest recente episode\n  if(dates.length<2)return 0;\n  let episodeStart=new Date(dates[0]);\n  for(let i=1;i<dates.length;i++){\n    const gap=Math.round((new Date(dates[i])-new Date(dates[i-1]))/864e5);\n    if(gap>180)episodeStart=new Date(dates[i]); // nieuwe episode na lang gat\n  }\n  const lastD=new Date(dates[dates.length-1]);\n  return Math.round((lastD-episodeStart)/(864e5*30));\n}\n\nfunction calcScore(count,months,fixed,adhPct,hasDose,c,isWL){\n  let s=0;\n  s+=Math.min(count/c.minP,2)*17.5;\n  s+=Math.min(months/c.minM,2)*17.5;\n  if(fixed)s+=8;\n  if(hasDose&&adhPct!==null){\n    s+=Math.round(adhPct*.4);\n    if(adhPct<60)s-=10;\n  } else if(!hasDose){s+=20;}\n  if(isWL)s+=9;\n  return Math.round(Math.min(Math.max(s,0),100));\n}\n\nfunction calcStatus(count,months,fixed,c,score){\n  if(count<c.minP)return'Uitgesloten';\n  if(months<c.minM)return'Uitgesloten';\n  if(c.reqF&&!fixed)return'Wisselende dosering';\n  return score>=55?'Aanbevolen':'Overwegen';\n}\n\nfunction redenAfwijzing(count,months,fixed,c,status){\n  if(status==='Aanbevolen')return null;\n  if(status==='Overwegen')return'Voldoet aan criteria maar score is laag';\n  if(status==='Wisselende dosering')return'Dosering wisselt — niet geschikt';\n  const r=[];\n  if(count<c.minP)r.push('Te weinig herhalingen ('+count+' van '+c.minP+' nodig)');\n  if(months<c.minM)r.push('Te kort onder behandeling ('+months+' van '+c.minM+' maanden)');\n  return r.join(' · ')||'Onvoldoende gegevens';\n}\n\nself.onmessage=function(e){\n  const {rawRows,crit:c,atcEnabled,extraWhitelistMeds,exclusieMeds}=e.data;\n  const extraSet=new Set(extraWhitelistMeds||[]);\n  const exclusieSet=new Set((exclusieMeds||[]).map(s=>s.toLowerCase()));\n  const maxInactief=c.maxInactief||90;\n\n  function isWLorExtra(atc,naam){\n    if(isWhitelisted(atc)&&!isBlacklisted(atc))return true;\n    return extraSet.has((naam||'').toLowerCase());\n  }\n\n  function isUitgesloten(atc,naam){\n    const naamL=(naam||'').toLowerCase();\n    const atcU=(atc||'').toUpperCase();\n    for(const k of exclusieSet){\n      if(naamL.includes(k))return true;\n      if(atcU.startsWith(k.toUpperCase()))return true;\n    }\n    return false;\n  }\n\n  // Bepaal peildatum (meest recente datum in dataset)\n  let peilTs=0;\n  rawRows.forEach(r=>{const d=r[C.datum];if(d){const t=new Date(d).getTime();if(t>peilTs)peilTs=t;}});\n  const peilDatum=peilTs?new Date(peilTs):new Date();\n\n  // Bepaal laatste verstrekking per patiënt voor inactiviteitscheck\n  const patLaatst={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim();\n    const datum=r[C.datum];\n    if(pid&&datum){\n      const t=new Date(datum).getTime();\n      if(!patLaatst[pid]||t>patLaatst[pid])patLaatst[pid]=t;\n    }\n  });\n\n  // Groepeer op pid|atc|sterkte (merkdeduplicatie)\n  const grps={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim(),atc=(r[C.atc]||'').trim(),naam=(r[C.naam]||'').trim();\n    const dist=(r[C.dist]||'').trim(),herk=(r[C.herk]||'').trim(),uitg=(r[C.uitg]||'').trim();\n    const dkode=(r[C.dkode]||'').trim(),datum=(r[C.datum]||'').trim(),aantal=parseInt(r[C.aantal]||'0')||0;\n    if(!atc||atc==='0'||!naam||!pid)return;\n    if(dist!=='N')return;\n    if(herk==='D')return;\n    if(isBlacklisted(atc))return;\n    if(isUitgesloten(atc,naam))return;\n    const dkodeUpper=dkode.toUpperCase();\n    const omschrUpper=(r[9]||'').toUpperCase();\n    if(/\\bZN\\b/.test(dkodeUpper)||omschrUpper.includes('ZO NODIG')||omschrUpper.includes('INDIEN NODIG'))return;\\n    // Variabele dosering (bereik): bijv 1-2D1T, 3-6D1T — niet geschikt voor herhaalservice\\n    if(/^\\\\d+-\\\\d+[DW]/i.test(dkode))return;\n    if(c.exclOZ&&(herk==='Z'||uitg==='ONB'))return;\n    const a3=atc.slice(0,3).toUpperCase();\n    if(atcEnabled[a3]===false)return;\n    // Inactiviteitscheck: sla patiënt over als laatste verstrekking te lang geleden\n    const patTs=patLaatst[pid]||0;\n    const dagsSinds=Math.round((peilDatum.getTime()-patTs)/864e5);\n    if(dagsSinds>maxInactief)return;\n    // Merkdeduplicatie: groepeer op pid|atc|sterkte\n    const sterkte=extractSterkte(naam);\n    const key=pid+'|'+atc+'|'+sterkte;\n    if(!grps[key])grps[key]={pid,atc,naam,sterkte,namen:new Set(),dkodes:[],entries:[]};\n    grps[key].namen.add(naam);\n    if(!grps[key].dkodes.includes(dkode))grps[key].dkodes.push(dkode);\n    if(datum)grps[key].entries.push({date:datum,datum,aantal,uitg,herk});\n  });\n\n  const analysis=Object.values(grps).map(g=>{\n    g.entries.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);\n    const dates=g.entries.map(e=>e.date);\n    const aantallen=g.entries.map(e=>e.aantal);\n    // Gebruik de meest voorkomende naam als weergavenaam\n    const naamFreq={};\n    g.namen.forEach(n=>{naamFreq[n]=(naamFreq[n]||0)+1;});\n    const weergaveNaam=Object.entries(naamFreq).sort((a,b)=>b[1]-a[1])[0]?.[0]||g.naam;\n    const aantalMerken=g.namen.size;\n    const months=calcContinuousMonths(dates);\n    const fixedDose=new Set(g.dkodes).size<=1;\n    const count=g.entries.length;\n    const mainDkode=g.dkodes.filter(d=>d&&d.length>1&&!/^\\d{4}-\\d{2}/.test(d))[0]||'';\n    const daily=parseDailyDose(mainDkode);\n    const adh=calcAdherence(dates,aantallen,mainDkode,c.margin);\n    const atcGrp=ATC_N[g.atc[0]?.toUpperCase()]||g.atc[0]?.toUpperCase()||'';\n    const isWL=isWLorExtra(g.atc,weergaveNaam);\n    const score=calcScore(count,months,fixedDose,adh.pct,!!mainDkode,c,isWL);\n    const status=calcStatus(count,months,fixedDose,c,score);\n    const herkM=g.entries.reduce((a,e)=>{a[e.herk]=(a[e.herk]||0)+1;return a},{});\n    const topHerk=Object.entries(herkM).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';\n    const lastDate=dates[dates.length-1];\n    const reden=redenAfwijzing(count,months,fixedDose,c,status);\n    const duurSignaal=months>=12?'stabiel':months<=1?'kort':'';\n    return{pid:g.pid,atc:g.atc,naam:weergaveNaam,aantalMerken,sterkte:g.sterkte,months,fixedDose,count,mainDkode,daily,adh,atcGrp,score,status,reden,duurSignaal,topHerk,dates,aantallen,isWL,lastDate,entries:g.entries};\n  }).filter(m=>m.naam);\n\n  self.postMessage({analysis});\n};\n";;
 
 function getWorker(){
   if(_analyseWorker)return _analyseWorker;
@@ -2748,6 +3331,85 @@ function getWorker(){
     _analyseWorker=null;
     return null;
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// BESTAND SAMENVOEGEN MET DEDUPLICATIE
+// ═══════════════════════════════════════════════════════════
+let mergedFiles=[];  // bijhouden welke bestanden samengevoegd zijn
+
+function handleMergeFile(e){if(e.target.files[0])mergeFile(e.target.files[0]);}
+function handleMergeDrop(e){
+  e.preventDefault();
+  document.getElementById('mergeZone').classList.remove('drag');
+  if(e.dataTransfer.files[0])mergeFile(e.dataTransfer.files[0]);
+}
+
+function mergeFile(file){
+  if(!rawRows.length){notify('Laad eerst een hoofdbestand','info');return;}
+  showLaadOverlay(file.name, file.size);
+  updateLaadOverlay(1,2);
+  const r=new FileReader();
+  r.onprogress=function(e){if(e.lengthComputable)updateLaadOverlay(1,(e.loaded/e.total)*15);};
+  r.onload=async function(e){
+    updateLaadOverlay(2,15);
+    let nieuweRows;
+    try{
+      nieuweRows=await parseTxtAsync(e.target.result,function(info){
+        updateLaadOverlay(2,15+info.pct*0.70,info.rows);
+      });
+    }catch(err){hideLaadOverlay();notify('Fout bij parsen: '+err.message,'info');return;}
+    if(!nieuweRows.length){hideLaadOverlay();notify('Geen leesbare rijen gevonden in '+file.name,'info');return;}
+
+    // Bouw deduplicatiesleutel: pid|atc|naam|datum|aantal
+    // Dit is uniek per receptregel — ook over bestanden heen
+    function maakSleutel(row){
+      return [
+        (row[C.pid]||'').trim(),
+        (row[C.atc]||'').trim(),
+        (row[C.naam]||'').trim(),
+        (row[C.datum]||'').trim(),
+        (row[C.aantal]||'').trim()
+      ].join('|');
+    }
+
+    // Index bestaande rijen
+    const bestaand=new Set(rawRows.map(maakSleutel));
+
+    // Voeg alleen nieuwe unieke rijen toe
+    let toegevoegd=0, dubbel=0;
+    nieuweRows.forEach(row=>{
+      const sleutel=maakSleutel(row);
+      if(bestaand.has(sleutel)){
+        dubbel++;
+      } else {
+        rawRows.push(row);
+        bestaand.add(sleutel);
+        toegevoegd++;
+      }
+    });
+
+    mergedFiles.push(file.name);
+    updateBestandsInfo();
+    updateLaadOverlay(3,85,rawRows.length);
+
+    // Update fileInfo
+    const infoEl=document.getElementById('mergeInfo');
+    infoEl.style.display='block';
+    infoEl.innerHTML=mergedFiles.map(n=>'📄 '+n).join('<br>')
+      +'<br><span style="color:var(--green)">+'+toegevoegd.toLocaleString('nl-NL')+' nieuwe regels</span>'
+      +(dubbel>0?'<span style="color:var(--muted)"> · '+dubbel.toLocaleString('nl-NL')+' duplicaten overgeslagen</span>':'');
+
+    const totaal=rawRows.length;
+    document.getElementById('fileInfo').textContent=
+      (mergedFiles.length+1)+' bestanden · '+totaal.toLocaleString('nl-NL')+' regels totaal';
+
+    notify('✓ Samengevoegd: +'+toegevoegd.toLocaleString('nl-NL')+' regels, '+dubbel.toLocaleString('nl-NL')+' duplicaten verwijderd');
+    _laadOverlayPending=true;
+    runAnalysis();
+  };
+  r.onerror=function(){hideLaadOverlay();notify('Fout bij lezen van bestand','info');};
+  r.readAsText(file,'utf-8');
 }
 
 // ═══════════════════════════════════════════
@@ -2796,6 +3458,444 @@ function checkLogin(){
 // NOTIFY
 // ═══════════════════════════════════════════
 function notify(msg,type='ok'){const el=document.getElementById('notify');el.textContent=msg;el.className='notify '+type;el.style.display='block';setTimeout(()=>el.style.display='none',3200);}
+
+// ═══════════════════════════════════════════
+// MEER-MENU (tabs voor beheerder)
+// ═══════════════════════════════════════════
+function toggleMeerMenu(){
+  const m=document.getElementById('meerMenu');
+  if(!m)return;
+  m.style.display=m.style.display==='none'?'block':'none';
+}
+
+function switchTabMenu(id){
+  const m=document.getElementById('meerMenu');
+  if(m)m.style.display='none';
+  document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  const tc=document.getElementById('tab-'+id);
+  if(tc)tc.classList.add('active');
+  activeTab=id;
+  if(id==='middelen')renderDirtyTab('meds');
+  else if(id==='grafieken')renderDirtyTab('grafieken');
+  else if(id==='huisartsen')renderDirtyTab('huisartsen');
+  else if(id==='brieven')renderBrievenTab();
+  const bkf=document.getElementById('btnKandFilter');
+  if(bkf)bkf.style.display='none';
+  const mmb=document.getElementById('meerMenuBtn');
+  if(mmb){mmb.style.color='var(--accent-dark)';mmb.style.borderColor='var(--accent)';}
+}
+
+
+// ═══════════════════════════════════════════
+// BRIEVEN GENEREREN
+// ═══════════════════════════════════════════
+let briefSjabloon=null;          // ArrayBuffer van geladen .docx
+let briefSjabloonNaam='';
+let briefActieveDag=null;        // 'YYYY-MM-DD' — geselecteerde dag
+let briefMedSelectie={};         // {pid: Set<medicijnnaam>}
+
+// Herstel sjabloon uit localStorage na page refresh
+function herstelBriefSjabloon(){
+  if(briefSjabloon)return;
+  try{
+    const b64=localStorage.getItem('briefSjabloon');
+    if(!b64)return;
+    const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+    briefSjabloon=bytes.buffer;
+    briefSjabloonNaam=localStorage.getItem('briefSjabloonNaam')||'sjabloon.docx';
+    const el=document.getElementById('briefSjabloonNaam');
+    if(el)el.textContent='✓ '+briefSjabloonNaam;
+  }catch(e){}
+}
+
+function laadBriefSjabloon(evt){
+  const file=evt.target.files[0];
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=function(e){
+    briefSjabloon=e.target.result;
+    briefSjabloonNaam=file.name;
+    try{
+      const b64=btoa(String.fromCharCode(...new Uint8Array(briefSjabloon)));
+      localStorage.setItem('briefSjabloon',b64);
+      localStorage.setItem('briefSjabloonNaam',file.name);
+    }catch(ex){}
+    const el=document.getElementById('briefSjabloonNaam');
+    if(el){el.textContent='✓ '+file.name;el.style.color='var(--green)';}
+    bijwerkDownloadKnop();
+    notify('✓ Sjabloon geladen: '+file.name);
+  };
+  r.readAsArrayBuffer(file);
+}
+
+function getDagSelectie(){
+  // Geef unieke datums van afgehandelde patiënten, nieuwste eerst
+  const datums=[...new Set(Object.values(doneTimestamps))].sort().reverse();
+  return datums;
+}
+
+function bijwerkDownloadKnop(){
+  const btn=document.getElementById('btnDownloadBrieven');
+  if(!btn)return;
+  const heeftSjabloon=!!briefSjabloon;
+  const heeftDag=!!briefActieveDag;
+  const heeftPats=briefActieveDag&&getPatSumm().some(p=>donePids.has(p.pid)&&doneTimestamps[p.pid]===briefActieveDag);
+  const ok=heeftSjabloon&&heeftDag&&heeftPats;
+  btn.disabled=!ok;
+  btn.style.opacity=ok?'1':'0.5';
+}
+
+function renderBrievenTab(){
+  herstelBriefSjabloon();
+  const alleDone=getPatSumm().filter(p=>donePids.has(p.pid));
+  const leeg=document.getElementById('briefLeeg');
+  const inhoud=document.getElementById('briefInhoud');
+  if(!leeg||!inhoud)return;
+
+  if(!alleDone.length){
+    leeg.style.display='flex';
+    inhoud.style.display='none';
+    return;
+  }
+  leeg.style.display='none';
+  inhoud.style.display='block';
+
+  // Dag-knoppen
+  const dagKnoppen=document.getElementById('briefDagKnoppen');
+  const datums=getDagSelectie();
+  if(!briefActieveDag||!datums.includes(briefActieveDag)){
+    briefActieveDag=datums[0]||null;
+  }
+  if(dagKnoppen){
+    dagKnoppen.innerHTML='';
+    datums.forEach(function(d){
+      const vandaag=new Date().toISOString().slice(0,10);
+      const isActief=d===briefActieveDag;
+      const n=alleDone.filter(function(p){return doneTimestamps[p.pid]===d;}).length;
+      const label=(d===vandaag?'Vandaag ':'')+d+' ('+n+' patiënt'+(n!==1?'en':'')+')';
+      const btn=document.createElement('button');
+      btn.className='btn btn-sm';
+      btn.textContent=label;
+      btn.style.cssText='background:'+(isActief?'var(--accent-dark)':'var(--surf)')+
+        ';color:'+(isActief?'#fff':'var(--dim)')+
+        ';border-color:'+(isActief?'var(--accent-dark)':'var(--border)')+
+        ';font-size:12px;font-weight:'+(isActief?'600':'400');
+      btn.addEventListener('click',function(){briefActieveDag=d;renderBrievenTab();});
+      dagKnoppen.appendChild(btn);
+    });
+  }
+
+  // Verstuurd-status voor actieve dag
+  const verstuurdLabel=document.getElementById('briefVerstuurdLabel');
+  const btnVerstuurd=document.getElementById('btnMarkeerVerstuurd');
+  if(briefActieveDag){
+    const isVerstuurd=!!briefVerstuurd[briefActieveDag];
+    if(verstuurdLabel){
+      verstuurdLabel.textContent=isVerstuurd?'✓ Brieven verstuurd op '+briefVerstuurd[briefActieveDag]:'';
+      verstuurdLabel.style.color='var(--green)';
+    }
+    if(btnVerstuurd)btnVerstuurd.style.display=isVerstuurd?'none':'inline-flex';
+  }
+
+  // Patiëntenlijst voor actieve dag
+  const lijst=document.getElementById('briefPatientenLijst');
+  if(!lijst||!briefActieveDag)return;
+
+  const dagPats=alleDone.filter(function(p){return doneTimestamps[p.pid]===briefActieveDag;});
+
+  // Init standaard-selectie voor nieuwe patiënten
+  dagPats.forEach(function(p){
+    if(!briefMedSelectie[p.pid]){
+      briefMedSelectie[p.pid]=new Set(p.meds.filter(function(m){return m.status==='Aanbevolen';}).map(function(m){return m.naam;}));
+    }
+  });
+
+  lijst.innerHTML='';
+  dagPats.forEach(function(p){
+    const naw=p.naw||{};
+    const naam=naw.naam||('Patiënt '+p.pid);
+    const heeftNaw=!!(naw.adres);
+
+    const card=document.createElement('div');
+    card.style.cssText='background:var(--surf);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden';
+
+    // Header kaart
+    const hdr=document.createElement('div');
+    hdr.style.cssText='display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--s2);border-bottom:1px solid var(--border)';
+    const info=document.createElement('div');
+    info.style.flex='1';
+    info.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--accent-dark)">'+naam+'</div>'
+      +(heeftNaw?'<div style="font-size:11px;color:var(--muted)">'+naw.adres+' &middot; '+naw.postcode+' '+naw.woonplaats+'</div>'
+        :'<div style="font-size:11px;color:var(--amber)">⚠ Geen adresgegevens in bestand (kolommen 21-24)</div>');
+    const pid=document.createElement('span');
+    pid.style.cssText='font-size:11px;color:var(--muted);flex-shrink:0';
+    pid.textContent='nr. '+p.pid;
+    const btnAan=document.createElement('button');
+    btnAan.className='btn btn-ghost btn-xs';btnAan.textContent='Alles ✓';
+    btnAan.addEventListener('click',function(){briefSelecteerAlles(p.pid,true);});
+    const btnUit=document.createElement('button');
+    btnUit.className='btn btn-ghost btn-xs';btnUit.textContent='Alles ✗';
+    btnUit.addEventListener('click',function(){briefSelecteerAlles(p.pid,false);});
+    hdr.appendChild(info);hdr.appendChild(pid);hdr.appendChild(btnAan);hdr.appendChild(btnUit);
+
+    // Medicijnen
+    const meds=document.createElement('div');
+    meds.style.padding='6px 8px';
+    const aangeraden=p.meds.filter(function(m){return m.status==='Aanbevolen'||m.status==='Overwegen';});
+    if(!aangeraden.length){
+      meds.innerHTML='<div style="padding:8px;font-size:12px;color:var(--muted)">Geen aanbevolen medicijnen</div>';
+    } else {
+      aangeraden.forEach(function(m){
+        const sel=briefMedSelectie[p.pid]&&briefMedSelectie[p.pid].has(m.naam);
+        const lbl=document.createElement('label');
+        lbl.style.cssText='display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;cursor:pointer;background:'+(sel?'rgba(0,158,203,.07)':'transparent');
+        const cb=document.createElement('input');
+        cb.type='checkbox';cb.checked=sel;
+        cb.style.cssText='width:15px;height:15px;accent-color:var(--accent);cursor:pointer;flex-shrink:0';
+        const mNaam=m.naam.charAt(0).toUpperCase()+m.naam.slice(1).toLowerCase();
+        const tekst=document.createElement('div');
+        tekst.style.flex='1';
+        tekst.innerHTML='<div style="font-size:13px;font-weight:500;color:var(--text)">'+mNaam+'</div>'
+          +(m.mainDkode?'<div style="font-size:11px;color:var(--muted)">'+m.mainDkode+'</div>':'');
+        cb.addEventListener('change',function(){
+          if(!briefMedSelectie[p.pid])briefMedSelectie[p.pid]=new Set();
+          if(this.checked)briefMedSelectie[p.pid].add(m.naam);
+          else briefMedSelectie[p.pid].delete(m.naam);
+          lbl.style.background=this.checked?'rgba(0,158,203,.07)':'transparent';
+        });
+        lbl.appendChild(cb);lbl.appendChild(tekst);
+        if(m.status==='Overwegen'){
+          const badge=document.createElement('span');
+          badge.style.cssText='font-size:10px;background:rgba(217,119,6,.1);color:#b45309;padding:1px 6px;border-radius:4px';
+          badge.textContent='Overwegen';
+          lbl.appendChild(badge);
+        }
+        meds.appendChild(lbl);
+      });
+    }
+    card.appendChild(hdr);card.appendChild(meds);
+    lijst.appendChild(card);
+  });
+
+  bijwerkDownloadKnop();
+}
+
+function briefSelecteerAlles(pid,aan){
+  const p=getPatSumm().find(function(q){return q.pid===pid;});
+  if(!p)return;
+  if(aan){briefMedSelectie[pid]=new Set(p.meds.filter(function(m){return m.status==='Aanbevolen'||m.status==='Overwegen';}).map(function(m){return m.naam;}));}
+  else{briefMedSelectie[pid]=new Set();}
+  renderBrievenTab();
+}
+
+function markeerBrievenVerstuurd(){
+  if(!briefActieveDag)return;
+  const datum=new Date().toISOString().slice(0,10);
+  briefVerstuurd[briefActieveDag]=datum;
+  saveSession();
+  renderBrievenTab();
+  notify('✓ Brieven voor '+briefActieveDag+' gemarkeerd als verstuurd');
+}
+
+// ─── Word-document generatie ───────────────────────────────────
+function escXml(s){
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─── Stap 1: herstel placeholders die Word over meerdere runs gesplitst heeft ───
+// Alleen mergen als de samengevoegde tekst een placeholder bevat maar geen
+// enkele individuele run hem volledig bevat. Opmaak van de EERSTE run blijft intact.
+function herstelGesplitsteRuns(xml){
+  var phs=['[Naam pati\u00ebnt]','[Adres]','[Postcode] [Woonplaats]',
+           '[Postcode]','[Woonplaats]','[Medicijnen]','[Datum]',
+           'Geachte [Naam pati\u00ebnt]'];
+  return xml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g,function(para){
+    // Verzamel alle runs en hun tekst
+    var runRe=/<w:r[ >][\s\S]*?<\/w:r>/g, runM;
+    var runs=[], texts=[];
+    while((runM=runRe.exec(para))!==null){
+      runs.push(runM[0]);
+      var t=(runM[0].match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/)||['',''])[1];
+      texts.push(t);
+    }
+    var samen=texts.join('');
+    // Is er een placeholder in de samengevoegde tekst?
+    if(!phs.some(function(ph){return samen.includes(ph);}))return para;
+    // Zit de placeholder al volledig in één run? Dan hoeven we niets te doen.
+    var alGoed=phs.every(function(ph){
+      if(!samen.includes(ph))return true;
+      return runs.some(function(r){
+        var t=(r.match(/<w:t[^>]*>([\s\S]*?)<\/w:t>/)||['',''])[1];
+        return t.includes(ph);
+      });
+    });
+    if(alGoed)return para;
+    // Merge alle runs tot één, met rPr van de EERSTE run (niet van pPr!)
+    // Zoek expliciet de rPr BINNEN een <w:r> (niet de pPr's rPr)
+    var eersteRunRpr='';
+    for(var i=0;i<runs.length;i++){
+      var m=runs[i].match(/<w:r[ >][^<]*(?:<(?!w:rPr)[^<]*)*<w:rPr>([\s\S]*?)<\/w:rPr>/);
+      if(!m)m=runs[i].match(/<w:rPr>([\s\S]*?)<\/w:rPr>/);
+      if(m){eersteRunRpr='<w:rPr>'+m[1]+'</w:rPr>';break;}
+    }
+    var nieuweRun='<w:r>'+eersteRunRpr+'<w:t xml:space="preserve">'+samen+'</w:t></w:r>';
+    // Verwijder alle bestaande runs en vervang door de samengevoegde
+    var zondeRuns=para.replace(/<w:r[ >][\s\S]*?<\/w:r>/g,'');
+    return zondeRuns.replace(/<\/w:p>/,nieuweRun+'</w:p>');
+  });
+}
+
+// ─── Stap 2: vervang tekst alleen binnen <w:t> elementen ───
+function vervangTekst(xml,ph,val){
+  var v=escXml(val);
+  // Probeer zowel de XML-ge-escape versie als de raw versie
+  return xml.split(escXml(ph)).join(v).split(ph).join(v);
+}
+
+// ─── Stap 3: [Medicijnen] uitbreiden — kloon pPr én rPr van de originele paragraaf ───
+// Gebruikt callback-replace zodat elke paragraaf INDIVIDUEEL wordt behandeld
+// (voorkomt cross-paragraaf matching bij xml.match())
+function expandeerMedicijnen(xml,medRegels){
+  return xml.replace(/<w:p[ >][\s\S]*?<\/w:p>/g,function(para){
+    // Verwerk alleen de paragraaf die letterlijk [Medicijnen] bevat
+    if(!para.includes('[Medicijnen]'))return para;
+
+    // Extraheer pPr (paragraafopmaak: spacing, justificatie, etc.)
+    var pPrM=para.match(/<w:pPr>([\s\S]*?)<\/w:pPr>/);
+    var pPr=pPrM?pPrM[0]:'';
+
+    // Extraheer rPr van de run (niet de pPr's eigen rPr!)
+    var rPr='';
+    var runM=para.match(/<w:r[ >][\s\S]*?<\/w:r>/);
+    if(runM){
+      var rprM=runM[0].match(/<w:rPr>([\s\S]*?)<\/w:rPr>/);
+      if(rprM)rPr=rprM[0];
+    }
+
+    // Genereer één paragraaf per medicijn, identiek aan de originele structuur
+    return medRegels&&medRegels.length
+      ?medRegels.map(function(r){
+          return '<w:p>'+pPr+'<w:r>'+rPr+'<w:t xml:space="preserve">'+escXml(r)+'</w:t></w:r></w:p>';
+        }).join('')
+      :'<w:p>'+pPr+'<w:r>'+rPr+'<w:t>(geen medicijnen geselecteerd)</w:t></w:r></w:p>';
+  });
+}
+
+// ─── Hoofd-invulfunctie: vult één exemplaar van het sjabloon ───
+// Werkt NON-DESTRUCTIEF: de XML-structuur wordt NIET geherstructureerd,
+// alleen tekst binnen <w:t> wordt vervangen.
+function vulSjabloonIn(tpl, naam, adres, postcode, woonplaats, datumNL, medRegels){
+  var s=tpl;
+  // 1. Herstel eventueel gesplitste placeholders
+  s=herstelGesplitsteRuns(s);
+  // 2. Vervang placeholders (langste eerst, anders overlapping)
+  s=vervangTekst(s,'Geachte [Naam pati\u00ebnt]','Geachte heer/mevrouw '+naam);
+  s=vervangTekst(s,'[Naam pati\u00ebnt]',naam);
+  s=vervangTekst(s,'[Adres]',adres||'');
+  s=vervangTekst(s,'[Postcode] [Woonplaats]',(postcode+' '+woonplaats).trim());
+  s=vervangTekst(s,'[Postcode]',postcode||'');
+  s=vervangTekst(s,'[Woonplaats]',woonplaats||'');
+  s=vervangTekst(s,'[Datum]',datumNL);
+  // 3. Medicijnenlijst uitbreiden (kloont paragraafopmaak)
+  s=expandeerMedicijnen(s,medRegels);
+  return s;
+}
+
+async function downloadBrieven(){
+  if(!briefSjabloon){notify('Laad eerst een Word-sjabloon','info');return;}
+  if(!briefActieveDag){notify('Selecteer een sessiedag','info');return;}
+
+  var dagPats=getPatSumm().filter(function(p){
+    return donePids.has(p.pid)&&doneTimestamps[p.pid]===briefActieveDag;
+  });
+  if(!dagPats.length){notify('Geen patiënten voor deze dag','info');return;}
+
+  var zonderNaw=dagPats.filter(function(p){return !p.naw||!p.naw.adres;});
+  if(zonderNaw.length){
+    var doorgaan=confirm('Sommige patiënten hebben geen adresgegevens. Toch doorgaan?');
+    if(!doorgaan)return;
+  }
+
+  // Zorg dat PizZip beschikbaar is (laad dynamisch als CDN bij paginaload mislukte)
+  const btn=document.getElementById('btnDownloadBrieven');
+  const origTekst=btn?btn.textContent:'';
+  try{
+    if(typeof PizZip==='undefined'){
+      notify('Word-bibliotheek laden…','info');
+      if(btn){btn.textContent='⏳ Laden…';btn.disabled=true;}
+      await ensurePizZip();
+      if(btn){btn.textContent=origTekst;btn.disabled=false;}
+    }
+  }catch(laadErr){
+    if(btn){btn.textContent=origTekst;btn.disabled=false;}
+    notify('⚠️ '+laadErr.message,'info');
+    return;
+  }
+
+  try{
+    var zip=new PizZip(briefSjabloon);
+    var docXml=zip.file('word/document.xml').asText();
+    var bodyM=docXml.match(/<w:body>([\s\S]*?)<\/w:body>/);
+    if(!bodyM){notify('Ongeldig Word-sjabloon — geen body-element gevonden','info');return;}
+    var body=bodyM[1];
+    var sectPr=(body.match(/<w:sectPr[\s\S]*?<\/w:sectPr>/)||[''])[0];
+    var tpl=body.replace(/<w:sectPr[\s\S]*?<\/w:sectPr>/,'');
+
+    // BELANGRIJK: gebruik een sectie-einde (sectPr in pPr) in plaats van een
+    // handmatige pagina-onderbreking (<w:br type="page">).
+    // Word onderdrukt 'w:before' spacing NIET bij sectie-overgangen,
+    // maar WEL bij handmatige pagina-onderbrekingen. Dit zorgt dat het
+    // adresblok op elke pagina op de juiste positie staat (vensterenvelop).
+    var sectieEinde=sectPr
+      ?'<w:p><w:pPr>'+sectPr+'</w:pPr></w:p>'
+      :'<w:p><w:pPr><w:sectPr><w:type w:val="nextPage"/></w:sectPr></w:pPr></w:p>';
+    var datumNL=new Date().toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'});
+
+    var secties=dagPats.map(function(p,idx){
+      var naw=p.naw||{};
+      var naam=naw.naam||('Pati\u00ebnt '+p.pid);
+      var geselecteerd=briefMedSelectie[p.pid]||new Set();
+      var medRegels=[...geselecteerd].map(function(n){
+        return '- '+(n.charAt(0).toUpperCase()+n.slice(1).toLowerCase());
+      });
+
+      // Gebruik de nieuwe non-destructieve invulfunctie
+      var s=vulSjabloonIn(
+        tpl,
+        naam,
+        naw.adres||'',
+        naw.postcode||'',
+        naw.woonplaats||'',
+        datumNL,
+        medRegels
+      );
+      return idx<dagPats.length-1?s+sectieEinde:s;
+    });
+
+    var nieuwXml=docXml.replace(/<w:body>[\s\S]*?<\/w:body>/,'<w:body>'+secties.join('')+sectPr+'</w:body>');
+    zip.file('word/document.xml',nieuwXml);
+    var blob=zip.generate({type:'blob',mimeType:'application/vnd.openxmlformats-officedocument.wordprocessingml.document'});
+    var url=URL.createObjectURL(blob);
+    var a=document.createElement('a');
+    a.href=url;
+    a.download='Brieven_Herhaalservice_'+briefActieveDag+'.docx';
+    a.click();
+    URL.revokeObjectURL(url);
+    notify('✓ '+dagPats.length+' brie'+(dagPats.length===1?'f':'ven')+' gedownload voor '+briefActieveDag);
+  }catch(err){
+    console.error('Brief fout:',err);
+    // Geef een duidelijkere foutmelding afhankelijk van de oorzaak
+    var melding=err.message||'Onbekende fout';
+    if(melding.toLowerCase().includes('pizzip')||melding.toLowerCase().includes('pizZip')){
+      melding='Word-bibliotheek niet beschikbaar — herlaad de pagina en probeer opnieuw.';
+    } else if(melding.includes('asText')||melding.includes('file')){
+      melding='Ongeldig sjabloon — het geladen .docx-bestand kan niet worden gelezen. Probeer het sjabloon opnieuw te laden.';
+    }
+    notify('⚠️ '+melding,'info');
+  }
+}
+
 </script>
 </body>
 </html>
