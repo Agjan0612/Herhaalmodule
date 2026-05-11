@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>HerhaalModule Analyser — Service Apotheek Hanzeplein</title>
+<title>HerhaalModule Analyser v45 — Service Apotheek Hanzeplein</title>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/pizzip@3.1.4/dist/pizzip.min.js" onerror="console.warn('PizZip CDN 1 mislukt, fallback laden…');"></script>
@@ -411,6 +411,26 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
 .apotheek-doorgaan:disabled{opacity:.4;cursor:not-allowed;}
 .apotheek-doorgaan:not(:disabled):hover{background:var(--accent-dark);}
 
+/* ── Gemiste receptuur tab ── */
+.gemist-stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.gemist-stat{background:var(--surf);border:1px solid var(--border);border-radius:8px;padding:10px 14px;display:flex;flex-direction:column;gap:3px;}
+.gemist-stat-val{font-size:22px;font-weight:700;color:var(--text);}
+.gemist-stat-lbl{font-size:11px;color:var(--muted);}
+.gemist-card{background:var(--surf);border:1px solid var(--border);border-radius:10px;margin-bottom:12px;overflow:hidden;}
+.gemist-card-hdr{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--s2);border-bottom:1px solid var(--border);}
+.gemist-med-row{display:grid;grid-template-columns:2fr 1fr auto;gap:0;border-bottom:1px solid var(--border);align-items:center;}
+.gemist-med-row:last-child{border-bottom:none;}
+.gemist-med-row>div{padding:10px 14px;}
+.gemist-med-hdr{display:grid;grid-template-columns:2fr 1fr auto;gap:0;background:var(--s2);border-bottom:1px solid var(--border);font-size:11px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+.gemist-med-hdr>div{padding:6px 14px;}
+.gemist-voldoet{background:rgba(5,150,105,.07);border-left:3px solid var(--green);}
+.gemist-onvoldoende{background:rgba(245,158,11,.06);border-left:3px solid var(--amber);}
+.gemist-actie-row{display:flex;align-items:center;gap:8px;padding:8px 14px;background:var(--bg);border-top:1px solid var(--border);}
+.gemist-pill-tu{display:inline-block;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:600;background:rgba(99,102,241,.12);color:rgba(79,70,229,1);}
+.gemist-pill-vu{display:inline-block;padding:1px 7px;border-radius:4px;font-size:10px;font-weight:600;background:rgba(217,119,6,.12);color:#b45309;}
+.gemist-afgehandeld{opacity:.55;pointer-events:none;}
+.gemist-undo-link{font-size:11px;color:var(--accent);cursor:pointer;text-decoration:underline;margin-left:6px;}
+
 @media print {
   header,.settings-panel,.toolbar,.stepper,.stats-row,#copyPanel,#copySuccess,.tab-bar,#exportBtn,.sp-toggle{display:none!important;}
   .app{display:block!important;}
@@ -618,12 +638,12 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
     <div id="geavanceerd-inner" style="display:none;">
       <div class="sec-title">Criteria</div>
       <div class="cr-row">
-        <div class="cr-top"><span class="cr-lbl">Min. behandelduur (mnd)</span><span class="cr-val" id="vMonths">3</span></div>
-        <input type="range" min="1" max="12" value="3" id="sMonths" oninput="document.getElementById('vMonths').textContent=this.value;debouncedReanalyse()">
+        <div class="cr-top"><span class="cr-lbl">Min. behandelduur (mnd)</span><span class="cr-val" id="vMonths">1</span></div>
+        <input type="range" min="1" max="12" value="1" id="sMonths" oninput="document.getElementById('vMonths').textContent=this.value;debouncedReanalyse()">
       </div>
       <div class="cr-row">
-        <div class="cr-top"><span class="cr-lbl">Min. verstrekkingen</span><span class="cr-val" id="vPresc">3</span></div>
-        <input type="range" min="2" max="20" value="3" id="sPresc" oninput="document.getElementById('vPresc').textContent=this.value;debouncedReanalyse()">
+        <div class="cr-top"><span class="cr-lbl">Min. verstrekkingen</span><span class="cr-val" id="vPresc">2</span></div>
+        <input type="range" min="2" max="20" value="2" id="sPresc" oninput="document.getElementById('vPresc').textContent=this.value;debouncedReanalyse()">
       </div>
       <div class="cr-row">
         <div class="cr-top"><span class="cr-lbl">Herhaalmarge (± dgn)</span><span class="cr-val" id="vMargin">30</span></div>
@@ -632,6 +652,7 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
       <label class="toggle"><input type="checkbox" id="togDose" checked onchange="reanalyse()"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-lbl">Vaste dosering vereist</span></label>
       <label class="toggle"><input type="checkbox" id="togVU" onchange="reanalyse()"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-lbl">Alleen vervolguitgiftes (VU)</span></label>
       <label class="toggle"><input type="checkbox" id="togExcl" checked onchange="reanalyse()"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-lbl">Sluit notities/zorgregels uit</span></label>
+      <label class="toggle"><input type="checkbox" id="togVerbergOngeschikt" checked onchange="verbergOngeschikte=this.checked;opslaanVerbergOngeschikte();renderPatienten()"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-lbl" style="display:flex;flex-direction:column;gap:1px">Verberg patiënten zonder geschikte medicijnen<span style="font-size:10px;color:var(--muted);font-weight:400">Patiënten waarbij alle kandidaat-medicijnen ongeschikt zijn op therapietrouw (&lt;70%) worden verborgen</span></span></label>
       <label class="toggle"><input type="checkbox" id="togPatroon" onchange="reanalyse()"><div class="toggle-track"><div class="toggle-thumb"></div></div><span class="toggle-lbl" style="display:flex;flex-direction:column;gap:1px">📊 Patroondetectie<span style="font-size:10px;color:var(--muted);font-weight:400">Detecteer vaste ophaalritmiek (bijv. acenocoumarol) ook zonder doseringscode</span></span></label>
       <div id="patroonOpties" style="display:none;margin-left:36px;margin-top:4px">
         <div class="cr-row" style="margin-bottom:6px">
@@ -797,6 +818,14 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
       <span id="sAdh" style="display:none">—</span>
       <span id="sPeil" style="display:none">—</span>
 
+      <!-- Bestandsperiode -->
+      <div class="stat-pill" id="sPeriodePill" style="display:none;flex-shrink:0">
+        <div class="stat-pill-info">
+          <div class="stat-pill-lbl">Periode in bestand</div>
+          <div id="sPeriode" style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--dim);margin-top:2px">—</div>
+        </div>
+      </div>
+
       <!-- Herhaalinterval — compact -->
       <div style="display:flex;align-items:center;gap:6px;margin-left:auto;flex-shrink:0">
         <span style="font-size:11px;color:var(--muted)">Interval:</span>
@@ -817,6 +846,7 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
           <div class="tab-bar">
             <button class="tab-btn active" id="tabKandidatenBtn" onclick="switchTab('kandidaten',this)">🏥 Patiënten</button>
             <button class="tab-btn" id="tabAfgehandeldBtn" onclick="switchTab('afgehandeld',this)" style="display:none">✅ Klaar <span id="afgehandeldCount" style="background:var(--accent);color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px">0</span></button>
+            <button class="tab-btn" id="tabGemistBtn" onclick="switchTab('gemist',this)" style="display:none">⚠️ Gemist <span id="gemistCount" style="background:#d97706;color:white;border-radius:10px;padding:1px 6px;font-size:10px;margin-left:3px">0</span></button>
           </div>
 
           <!-- Meer-menu: beheerder/apotheker tabs -->
@@ -1039,6 +1069,37 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
       </div>
     </div>
 
+
+    <!-- TAB: GEMIST -->
+    <div class="tab-content" id="tab-gemist" style="flex:1;flex-direction:column;min-height:0;overflow:hidden;">
+      <div style="padding:14px 20px;border-bottom:1px solid var(--border);background:var(--surf);flex-shrink:0">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+        <div>
+          <div style="font-size:15px;font-weight:700;color:var(--text)">⚠️ Gemiste receptuur</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:2px">Recepten (dist=H, herkomst=N, uitgifte TU/VU) bij patiënten die al in de herhaalservice zitten</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <span style="font-size:12px;color:var(--muted)">Tijdvenster:</span>
+          <select id="gemistTijdvensterSelect" class="search-inp" style="width:auto;padding:5px 10px;font-size:12px" onchange="gemistTijdvenster=+this.value;saveSession();renderGemistTab()">
+            <option value="7">Laatste 7 dagen</option>
+            <option value="14">Laatste 14 dagen</option>
+            <option value="30">Laatste 30 dagen</option>
+            <option value="90" selected>Laatste 90 dagen</option>
+            <option value="180">Laatste 180 dagen</option>
+            <option value="9999">Alle data</option>
+          </select>
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer">
+            <input type="checkbox" id="gemistToonAfgehandeld" onchange="renderGemistTab()" style="cursor:pointer">
+            Toon afgehandeld
+          </label>
+          <button id="btnGemistLogboek" class="btn btn-ghost btn-sm" style="font-size:11px" onclick="gemistLogboekOpen=!gemistLogboekOpen;renderGemistTab()">📋 Logboek</button>
+        </div>
+      </div>
+    </div>
+      <div id="gemistStatRow" class="gemist-stat-row" style="padding:14px 20px 0;flex-shrink:0"></div>
+      <div id="gemistLijst" style="flex:1;overflow-y:auto;padding:0 20px 20px"></div>
+    </div>
+
   </div><!-- /dashboard -->
 </div><!-- /main-area -->
 </div><!-- /app -->
@@ -1097,6 +1158,7 @@ code{background:var(--s2);padding:1px 5px;border-radius:3px;font-family:var(--mo
     </div>
   </div>
 </div>
+
 <div class="notify ok" id="notify"></div>
 
 <script>
@@ -1107,7 +1169,7 @@ function handleDrop(e){e.preventDefault();document.getElementById('uploadZone').
 // ═══════════════════════════════════════════
 // CONFIGURATIE & CONSTANTEN
 // ═══════════════════════════════════════════
-const C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18,naamPartner:20,naamPat:21,adres:22,postcode:23,woonplaats:24,aanschrijfnaam:25};
+const C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18,naamPartner:20,naamPat:21,adres:22,postcode:23,woonplaats:24,aanschrijfnaam:25,email:26};
 
 const ATC_N={'A':'Maag/Metabolisme','B':'Bloed','C':'Cardiovasculair','D':'Dermatologie','G':'Urogenitaal','H':'Hormonen','J':'Anti-infectieus','L':'Oncologie','M':'Bewegingsapparaat','N':'Zenuwstelsel','P':'Antiparasitica','R':'Luchtwegen','S':'Zintuigen','V':'Diversen'};
 
@@ -1119,6 +1181,7 @@ const ATC_WHITELIST={
   'A11':'Vitamines chronisch',
   'A12':'Mineralen chronisch',
   'B01':'Antitrombotisch stabiel',
+  'C01':'Cardiaca / nitraten stabiel',
   'C02':'Antihypertensiva overig',
   'C03':'Diuretica onderhoud',
   'C07':'Bètablokkers',
@@ -1182,6 +1245,56 @@ function isWhitelisted(atc){
   return Object.keys(ATC_WHITELIST).some(k=>atc.startsWith(k));
 }
 
+// ── Therapietrouw-drempel voor statusverlaging ────────────────────────────
+// Medicijnen met bekende therapietrouw ONDER deze grens worden nooit
+// hoger dan 'Ongeschikt' — ook al is hun score ≥ 55.
+const ADH_DREMPEL = 70; // procent
+
+// ── Standaard naam-exclusies — volledig uitgefilterd ─────────────────────
+// Geneesmiddelen waarvan de naam een van deze substrings bevat worden
+// helemaal niet meegenomen in de analyse (ook niet zichtbaar).
+// Uitbreiden: voeg hier extra substrings toe (lowercase).
+const NAAM_EXCLUSIES = [
+  'alutard','sustanon','implanon','sildenafil',
+  'thiamine','salbutamol','lenzet'
+];
+
+// ── Zichtbare naam-exclusies — ophaalpatroon wél zichtbaar ────────────────
+// Deze geneesmiddelen krijgen een aparte status en tellen niet mee voor
+// kandidaatstatus, maar zijn wel zichtbaar in het detailpaneel.
+const ZICHTBAAR_NAAM_EXCLUSIES = [
+  'acenocoumarol'
+];
+
+function isNaamUitgesloten(naam){
+  const naamL=(naam||'').toLowerCase();
+  return NAAM_EXCLUSIES.some(t=>naamL.includes(t));
+}
+function isZichtbaarNaamUitgesloten(naam){
+  const naamL=(naam||'').toLowerCase();
+  return ZICHTBAAR_NAAM_EXCLUSIES.some(t=>naamL.includes(t));
+}
+
+// ── Farmaceutische vormfilter ──────────────────────────────────────────────
+// Geneesmiddelen in deze categorieën zijn NIET geschikt voor herhaalservice
+// omdat de verbruiksduur niet betrouwbaar te berekenen is.
+// Uitbreiding: voeg hier eenvoudig extra termen toe indien nodig.
+const VORM_EXCLUSIES = [
+  'CREME','CRÈME','ZALF','GEL','LOTION','EMULSIE',
+  'OOGZALF','OOGDRUPPEL'
+];
+// ATC-klassen die op dezelfde manier worden uitgesloten (prefix-match)
+const ATC_VORM_UITSLUIT = {
+  'A10A': 'Insuline (variabele dosering per patiënt)'
+};
+
+function isVormUitgesloten(atc, naam){
+  const naamU = (naam || '').toUpperCase();
+  const atcU  = (atc  || '').toUpperCase();
+  if(Object.keys(ATC_VORM_UITSLUIT).some(k => atcU.startsWith(k))) return true;
+  return VORM_EXCLUSIES.some(t => naamU.includes(t));
+}
+
 // ═══════════════════════════════════════════
 // STATE
 // ═══════════════════════════════════════════
@@ -1239,6 +1352,7 @@ let briefVerstuurd={};   // {'YYYY-MM-DD': true} — brieven verstuurd per dag
 let activePid=null;
 function debouncedFilterPats(v){clearTimeout(_searchDebTimer);_searchDebTimer=setTimeout(()=>filterPats(v),180);}
 let showOnlyKandidaten=true;  // standaard: alleen kandidaten tonen
+let verbergOngeschikte=true;  // standaard: patiënten zonder geschikte medicijnen verbergen
 let _laadOverlayPending=false; // true = overlay actief tijdens initieel laden
 
 // ═══════════════════════════════════════════
@@ -1300,54 +1414,132 @@ function calcAdherence(dates,aantallen,dkode,margin){
 // ═══════════════════════════════════════════
 // DEMO DATA
 // ═══════════════════════════════════════════
-function mkRow(pid,atc,naam,dkode,aantal,uitg,herk,datum,huisarts){
-  const r=new Array(19).fill('');
-  r[C.pid]=pid;r[C.atc]=atc;r[C.naam]=naam;r[C.dkode]=dkode;
-  r[C.aantal]=String(aantal);r[C.uitg]=uitg;r[C.herk]=herk;r[C.dist]='N';r[C.datum]=datum;
-  r[C.huisarts]=huisarts||'';
+function mkRow(pid,atc,naam,dkode,aantal,uitg,herk,datum,huisarts,dist,naamPat,adres,postcode,woonplaats){
+  const r=new Array(26).fill('');
+  r[C.pid]=pid; r[C.atc]=atc; r[C.naam]=naam; r[C.dkode]=dkode;
+  r[C.aantal]=String(aantal); r[C.uitg]=uitg||'VU'; r[C.herk]=herk||'H';
+  r[C.dist]=dist||'N'; r[C.datum]=datum; r[C.huisarts]=huisarts||'';
+  r[C.naamPat]=naamPat||''; r[C.adres]=adres||''; r[C.postcode]=postcode||'';
+  r[C.woonplaats]=woonplaats||'';
+  r[C.aanschrijfnaam]=(naamPat||'').split(' ').slice(-1)[0]||'';
   return r;
 }
+
 function loadDemo(){
-  const pts=[
-    ['312','A02BC05','ESOMEPRAZ 20MG CAPS','1D1C',28,'VEGT'],
-    ['312','A10BA02','METFORMINE 1000MG TAB','1D1T',90,'VEGT'],
-    ['312','C10AA01','SIMVASTATINE 40MG TAB','1D1T',90,'VEGT'],
-    ['312','N06DA03','RIVASTIGM 9,5MG PLEISTER','1D1PL',30,'VEGT'],
-    ['312','A10BJ06','OZEMPIC 0,5MG PEN','1W1IJ',4,'VEGT'],
-    ['1075','M05BA04','ALENDRONINEZUUR 70MG TAB','1W1T',12,'JANSEN'],
-    ['1075','C09AA03','LISINOPRIL 10MG TAB','1D1T',90,'JANSEN'],
-    ['1075','C10AA07','ROSUVASTATINE 5MG TAB','1D1T',90,'JANSEN'],
-    ['1075','H03AA01','LEVOTHYROXINE 75MCG TAB','1D1T',90,'JANSEN'],
-    ['1189','C07CB03','ATENOL/CHLORT 50/12,5 TAB','1D1T',90,'SMIT'],
-    ['1189','N05BA04','OXAZEPAM 10MG TAB','1D1T',30,'SMIT'],
-    ['1321','A02BC01','OMEPRAZOL 20MG CAP','1D1C',100,'VEGT'],
-    ['1321','C09AA03','LISINOPRIL 10MG TAB','1D1T',100,'VEGT'],
-    ['1321','C10AA07','ROSUVASTATINE 5MG TAB','1D1T',90,'VEGT'],
-    ['5001','N06AB06','SERTRALINE 50MG TAB','1D1T',90,'JANSEN'],
-    ['5001','C03CA01','FUROSEMIDE 40MG TAB','1D1T',90,'JANSEN'],
-    ['5001','C09AA03','LISINOPRIL 5MG TAB','1D1T',90,'JANSEN'],
-    ['5002','R03AC02','SALBUTAMOL 100MCG INH','2D2PU',200,'SMIT'],
-    ['5002','H03AA01','LEVOTHYROXINE 75MCG TAB','1D1T',90,'SMIT'],
-    ['5002','B01AF01','RIVAROXABAN 20MG TAB','1D1T',90,'SMIT'],
-    ['8811','C09AA03','LISINOPRIL 10MG TAB','1D1T',90,'JANSEN'],
-    ['8811','C10AA01','SIMVASTATINE 20MG TAB','1D1T',90,'JANSEN'],
-    ['8811','A10BA02','METFORMINE 500MG TAB','2D1T',60,'JANSEN'],
-  ];
   rawRows=[];
-  const today=new Date('2026-03-18');
-  pts.forEach(([pid,atc,naam,dkode,antal,huisarts])=>{
+  const today=new Date('2026-04-28');
+
+  // Helper: genereer verstrekkingen met instelbare therapietrouw-kwaliteit
+  // kwaliteit: 'goed' = ±5d afwijking, 'matig' = ±20d, 'slecht' = grote willekeurige gaten
+  function genVerstr(pid,atc,naam,dkode,aantal,huisarts,nRec,kwaliteit,naw,dist){
     const daily=parseDailyDose(dkode)||1;
-    const dsupply=antal/daily;
-    const nRec=3+Math.floor(Math.random()*7);
-    let cur=new Date(today.getTime()-(nRec+1)*dsupply*864e5+(Math.random()-.5)*10*864e5);
+    const dsupply=Math.round(aantal/daily);
+    let cur=new Date(today.getTime()-(nRec+0.5)*dsupply*864e5);
     for(let i=0;i<nRec;i++){
-      if(i>0){const r=Math.random();let off=0;if(r<.7)off=(Math.random()-.5)*20;else if(r<.9)off=30+Math.random()*30;else off=-(30+Math.random()*20);cur=new Date(cur.getTime()+(dsupply+off)*864e5);}
-      rawRows.push(mkRow(pid,atc,naam,dkode,antal,i===0?'EU':'VU',i===0?'R':'H',cur.toISOString().slice(0,10),huisarts));
+      if(i>0){
+        let off=0;
+        if(kwaliteit==='goed')   off=(Math.random()-.5)*10;
+        else if(kwaliteit==='matig')  off=(Math.random()-.5)*30;
+        else if(kwaliteit==='slecht') off=(Math.random()<.5?1:-1)*(40+Math.random()*50);
+        cur=new Date(cur.getTime()+(dsupply+off)*864e5);
+      }
+      const uitg=i===0?'EU':'VU';
+      const herk=dist==='H'?'H':(i===0?'R':'H');
+      rawRows.push(mkRow(pid,atc,naam,dkode,aantal,uitg,herk,
+        cur.toISOString().slice(0,10),huisarts,dist||'N',
+        naw.naam,naw.adres,naw.pc,naw.plaats));
     }
+  }
+
+  // ── Patiënt 10042: sterke kandidaat — Aanbevolen voor 3 middelen ─────────
+  // Laat zien: Aanbevolen-status, synchronisatieplan met 3 middelen
+  const naw42={naam:'A. de Groot',adres:'Molenstraat 14',pc:'9700 AA',plaats:'Groningen'};
+  genVerstr('10042','C09AA03','LISINOPRIL 10MG TAB','1D1T',90,'DE VRIES',9,'goed',naw42);
+  genVerstr('10042','C10AA05','ATORVASTAT PCH 40MG TAB','1D1T',90,'DE VRIES',9,'goed',naw42);
+  genVerstr('10042','A10BA02','METFORMINE 1000MG TAB','1D1T',90,'DE VRIES',8,'goed',naw42);
+
+  // ── Patiënt 10079: gemengd — Aanbevolen + Overwegen ──────────────────────
+  // Laat zien: niet alle middelen even sterk, Overwegen-badge
+  const naw79={naam:'B. Bakker-Smit',adres:'Kerkstraat 5',pc:'9701 BC',plaats:'Groningen'};
+  genVerstr('10079','C08CA01','AMLODIPINE 5MG TAB','1D1T',90,'BAKKER',8,'goed',naw79);
+  genVerstr('10079','A02BC01','OMEPRAZOL MSB 20MG CAP','1D1C',30,'BAKKER',4,'matig',naw79);
+  genVerstr('10079','N06AB06','SERTRALINE 50MG TAB','1D1T',90,'BAKKER',7,'matig',naw79);
+
+  // ── Patiënt 10156: ongeschikt — therapietrouw <70% ────────────────────────
+  // Laat zien: Ongeschikt-badge, standaard verborgen door toggle
+  const naw56={naam:'C. Janssen',adres:'Prins Bernhardlaan 3',pc:'9702 CD',plaats:'Groningen'};
+  genVerstr('10156','C09CA01','LOSARTAN KALI 50MG TAB','1D1T',90,'JANSEN',7,'slecht',naw56);
+  genVerstr('10156','C10AA07','ROSUVASTAT SUN 10MG TAB','1D1T',90,'JANSEN',6,'slecht',naw56);
+
+  // ── Patiënt 10234: farmaceutische vorm ───────────────────────────────────
+  // Laat zien: grijze Farmaceutische vorm-badge voor creme, normaal voor tablet
+  const naw34={naam:'D. van Dijk',adres:'Zuiderdiep 88',pc:'9703 EF',plaats:'Groningen'};
+  genVerstr('10234','C03CA01','FUROSEMIDE 40MG TAB','1D1T',90,'SMIT',7,'goed',naw34);
+  genVerstr('10234','H03AA01','LEVOTHYROXINE 75MCG TAB','1D1T',90,'SMIT',8,'goed',naw34);
+  genVerstr('10234','D07AC01','BETAMETHASON 0,1% CREME','','30','VU','H',
+    today.toISOString().slice(0,10),'SMIT','N',naw34.naam,naw34.adres,naw34.pc,naw34.plaats);
+  genVerstr('10234','G03CA03','OESTROGEL 0,6MG/G GEL','','80','VU','H',
+    today.toISOString().slice(0,10),'SMIT','N',naw34.naam,naw34.adres,naw34.pc,naw34.plaats);
+
+  // ── Patiënt 10298: dosering trombosedienst ────────────────────────────────
+  // Laat zien: acenocoumarol met grijze Dosering trombosedienst-badge, bisoprolol normaal
+  const naw98={naam:'E. Mulder',adres:'Herestraat 22',pc:'9711 GH',plaats:'Groningen'};
+  genVerstr('10298','B01AA07','ACENOCOUMAROL 1MG TAB','','30','VU','H',
+    today.toISOString().slice(0,10),'DE VRIES','N',naw98.naam,naw98.adres,naw98.pc,naw98.plaats);
+  genVerstr('10298','C07AB07','BISOPROLOL SUN 5MG TAB','1D1T',90,'DE VRIES',8,'goed',naw98);
+  genVerstr('10298','C09AA05','RAMIPRIL 5MG CAP','1D1C',90,'DE VRIES',7,'goed',naw98);
+
+  // ── Patiënt 10367: dubbele therapie-waarschuwing ──────────────────────────
+  // Laat zien: twee middelen uit dezelfde ATC-klasse → waarschuwing
+  const naw67={naam:'F. Wolters',adres:'Paterswoldseweg 44',pc:'9728 IJ',plaats:'Groningen'};
+  genVerstr('10367','C10AA01','SIMVASTATINE 20MG TAB','1D1T',90,'BAKKER',6,'goed',naw67);
+  genVerstr('10367','C10AA05','ATORVASTAT PCH 20MG TAB','1D1T',90,'BAKKER',5,'goed',naw67);
+  genVerstr('10367','C09AA03','LISINOPRIL 5MG TAB','1D1T',90,'BAKKER',8,'goed',naw67);
+
+  // ── Patiënt 10445: synchronisatieplan met 3 middelen ─────────────────────
+  // Laat zien: 30d/60d/90d supply → mooie overbrugberekening
+  const naw45={naam:'G. Hoekstra',adres:'Verlengde Hereweg 67',pc:'9721 KL',plaats:'Groningen'};
+  genVerstr('10445','C07AB02','METOPROLOL SUN 50MG TAB','2D1T',30,'JANSEN',9,'goed',naw45);
+  genVerstr('10445','C09AA05','RAMIPRIL 10MG CAP','1D1C',90,'JANSEN',8,'goed',naw45);
+  genVerstr('10445','H03AA01','LEVOTHYROXINE 50MCG TAB','1D1T',90,'JANSEN',7,'goed',naw45);
+
+  // ── Patiënt 10521: gemiste receptuur ─────────────────────────────────────
+  // Laat zien: patiënt op herhaalservice (dist=H), maar één middel via gewoon recept
+  const naw21={naam:'H. Timmers',adres:'Oosterweg 9',pc:'9765 MN',plaats:'Haren'};
+  // Twee middelen al op herhaalservice (dist=H, herk=H)
+  genVerstr('10521','C08CA01','AMLODIPINE 5MG TAB','1D1T',90,'SMIT',8,'goed',naw21,'H');
+  genVerstr('10521','C09AA03','LISINOPRIL 10MG TAB','1D1T',90,'SMIT',7,'goed',naw21,'H');
+  // Atorvastatine wordt via gewoon recept verstrekt terwijl patiënt op HS zit → gemist!
+  const offsets=[120,30];
+  offsets.forEach((dAgo,i)=>{
+    const d=new Date(today.getTime()-dAgo*864e5);
+    rawRows.push(mkRow('10521','C10AA05','ATORVASTAT PCH 40MG TAB','1D1T',90,
+      i===0?'TU':'VU','R',d.toISOString().slice(0,10),'SMIT','H',
+      naw21.naam,naw21.adres,naw21.pc,naw21.plaats));
   });
-  rawRows.push(mkRow('1189','J01FA10','AZITROMYCINE 500MG TAB','1D1T',3,'EU','O','2026-01-17','SMIT'));
-  notify('Demo geladen: '+rawRows.length+' regels');
-  buildAtcToggles();runAnalysis();
+
+  // ── Patiënt 10589: afbouwdetectie ────────────────────────────────────────
+  // Laat zien: hoeveelheden nemen af over tijd → afbouwsignaal
+  const naw89={naam:'I. Posthuma',adres:'Nieuwe Boteringestraat 31',pc:'9712 OP',plaats:'Groningen'};
+  const afbouwAantallen=[100,100,75,75,50];
+  let afbouwDat=new Date(today.getTime()-afbouwAantallen.length*80*864e5);
+  afbouwAantallen.forEach((n,i)=>{
+    afbouwDat=new Date(afbouwDat.getTime()+(i===0?0:80*864e5));
+    rawRows.push(mkRow('10589','N06AB06','SERTRALINE 50MG TAB','1D1T',n,
+      i===0?'EU':'VU',i===0?'R':'H',afbouwDat.toISOString().slice(0,10),'DE VRIES','N',
+      naw89.naam,naw89.adres,naw89.pc,naw89.plaats));
+  });
+  genVerstr('10589','A02BC05','ESOMEPRAZOL 20MG CAPS','1D1C',30,'DE VRIES',7,'goed',naw89);
+
+  // ── Patiënt 10633: meerdere goede kandidaten, andere huisarts ────────────
+  const naw33={naam:'J. van den Berg',adres:'Helperzoom 55',pc:'9722 QR',plaats:'Groningen'};
+  genVerstr('10633','A10BA02','METFORMINE 500MG TAB','2D1T',60,'JANSEN',10,'goed',naw33);
+  genVerstr('10633','C07AB02','METOPROLOL 50MG TAB','2D1T',60,'JANSEN',9,'goed',naw33);
+  genVerstr('10633','C10AA01','SIMVASTATINE 40MG TAB','1D1T',90,'JANSEN',8,'goed',naw33);
+  genVerstr('10633','N06AB10','ESCITALOPRAM 10MG TAB','1D1T',90,'JANSEN',7,'matig',naw33);
+
+  notify('Demo geladen — '+rawRows.length+' regels, 10 fictieve patiënten');
+  buildAtcToggles(); runAnalysis();
 }
 
 // ═══════════════════════════════════════════
@@ -1657,7 +1849,7 @@ function parseTxt(text){
 function buildAtcToggles(){
   const gc={};
   rawRows.forEach(r=>{const a=(r[C.atc]||'').trim();if(a&&a!=='0'&&a.length>=3){const g=a.slice(0,3).toUpperCase();gc[g]=(gc[g]||0)+1;}});
-  Object.keys(gc).forEach(g=>{if(atcEnabled[g]===undefined)atcEnabled[g]=true;});
+  Object.keys(gc).forEach(g=>{if(atcEnabled[g]===undefined)atcEnabled[g]=isWhitelisted(g)&&!isBlacklisted(g);});
   document.getElementById('atcToggles').innerHTML=Object.keys(gc).sort().map(g=>{
     const isW=isWhitelisted(g)&&!isBlacklisted(g);
     const nm=ATC_WHITELIST[g]||ATC_N[g[0]]||g;
@@ -1797,6 +1989,7 @@ function runAnalysisSync(){
     if(herk==='D')return;
     if(isBlacklisted(atc))return;
     if(isUitgesloten(atc,naam))return;
+    if(isNaamUitgesloten(naam))return;
     const dkodeUpper=dkode.toUpperCase(),omschrUpper=(r[9]||'').toUpperCase();
     if(/ZN/.test(dkodeUpper)||omschrUpper.includes('ZO NODIG')||omschrUpper.includes('INDIEN NODIG'))return;
     if(/^\d+-\d+[DW]/i.test(dkode))return;
@@ -1824,6 +2017,7 @@ function runAnalysisSync(){
       if(!atc||atc==='0'||!naam||!pid||!datum)return;
       if(dist!=='N'||herk==='D')return;
       if(isBlacklisted(atc)||isUitgesloten(atc,naam))return;
+      if(isNaamUitgesloten(naam))return;
       if(c.exclOZ&&(herk==='Z'||uitg==='ONB'))return;
       const a3=atc.slice(0,3).toUpperCase();
       if(atcEnabled[a3]===false)return;
@@ -1872,11 +2066,13 @@ function runAnalysisSync(){
     const atcGrp=ATC_N[g.atc[0]?.toUpperCase()]||g.atc[0]?.toUpperCase()||'';
     const isWL=isWLorExtraSync(g.atc,weergaveNaam);
     const score=calcScore(count,months,fixedDose,adh.pct,!!mainDkode,c,isWL);
-    const status=calcStatus(count,months,fixedDose,c,score);
+    const isVorm=isVormUitgesloten(g.atc,weergaveNaam);
+    const isZichtbaarUitgesl=isZichtbaarNaamUitgesloten(weergaveNaam);
+    const status=isVorm?'Farmaceutische vorm':isZichtbaarUitgesl?'Dosering trombosedienst':calcStatus(count,months,fixedDose,c,score,adh.pct);
     const herkM=g.entries.reduce((a,e)=>{a[e.herk]=(a[e.herk]||0)+1;return a},{});
     const topHerk=Object.entries(herkM).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
     const lastDate=dates[dates.length-1];
-    const reden=redenAfwijzing(count,months,fixedDose,c,status);
+    const reden=redenAfwijzing(count,months,fixedDose,c,status,score,adh.pct);
     const duurSignaal=months>=12?'stabiel':months<=1?'kort':'';
 
     // ── SIGNAAL #6: Afbouwtraject ──
@@ -1928,17 +2124,25 @@ function calcScore(count,months,fixed,adhPct,hasDose,c,isWL){
   return Math.round(Math.min(Math.max(s,0),100));
 }
 
-function calcStatus(count,months,fixed,c,score){
+function calcStatus(count,months,fixed,c,score,adhPct){
   if(count<c.minP)return'Uitgesloten';
   if(months<c.minM)return'Uitgesloten';
   if(c.reqF&&!fixed)return'Wisselende dosering';
+  // Therapietrouw-drempel: alleen verlagen als therapietrouw bekend én te laag
+  if(adhPct!==null&&adhPct!==undefined&&adhPct<ADH_DREMPEL)return'Ongeschikt';
   return score>=55?'Aanbevolen':'Overwegen';
 }
 
-function redenAfwijzing(count,months,fixed,c,status){
+function redenAfwijzing(count,months,fixed,c,status,score,adhPct){
   if(status==='Aanbevolen')return null;
-  if(status==='Overwegen')return'Voldoet aan criteria maar score is laag — controleer therapietrouw';
+  if(status==='Ongeschikt')
+    return`Therapietrouw te laag (${adhPct}% < ${ADH_DREMPEL}%) — controleer ophaalpatroon vóór opname in herhaalservice`;
+  if(status==='Overwegen'){
+    return'Voldoet aan criteria maar score is laag — controleer therapietrouw';
+  }
   if(status==='Wisselende dosering')return'Dosering wisselt — niet geschikt voor vaste herhaalservice';
+  if(status==='Dosering trombosedienst')return'Dosering wordt extern bepaald (trombosedienst) — ophaalpatroon zichtbaar ter informatie';
+  if(status==='Farmaceutische vorm')return'Crème, zalf, gel of insuline — verbruiksduur niet betrouwbaar te berekenen';
   const redenen=[];
   if(count<c.minP)redenen.push(`Te weinig herhalingen (${count} van ${c.minP} nodig)`);
   if(months<c.minM)redenen.push(`Te kort onder behandeling (${months} van ${c.minM} maanden nodig)`);
@@ -1960,11 +2164,12 @@ function buildPatSumm(){
     if(pid&&ha&&ha!=='0'&&!/^\d+$/.test(ha)&&!ha.includes(':')&&!/^\d{4}-/.test(ha)&&ha.length>=2)patHuisarts[pid]=ha;
   });
   analysis.forEach(m=>{
-    if(!pm[m.pid])pm[m.pid]={pid:m.pid,meds:[],aanb:0,overw:0,adhScores:[],lastDate:null,huisarts:patHuisarts[m.pid]||'',redenen:[]};
+    if(!pm[m.pid])pm[m.pid]={pid:m.pid,meds:[],aanb:0,overw:0,onges:0,adhScores:[],lastDate:null,huisarts:patHuisarts[m.pid]||'',redenen:[]};
     if(m.reden&&m.status!=='Aanbevolen'&&!pm[m.pid].redenen.includes(m.reden))pm[m.pid].redenen.push(m.reden);
     pm[m.pid].meds.push(m);
     if(m.status==='Aanbevolen')pm[m.pid].aanb++;
     else if(m.status==='Overwegen')pm[m.pid].overw++;
+    else if(m.status==='Ongeschikt')pm[m.pid].onges++;
     if(m.adh.pct!==null)pm[m.pid].adhScores.push(m.adh.pct);
     if(!pm[m.pid].lastDate||m.lastDate>pm[m.pid].lastDate)pm[m.pid].lastDate=m.lastDate;
   });
@@ -1979,7 +2184,8 @@ function buildPatSumm(){
       adres:(nawRij[C.adres]||'').trim(),
       postcode:(nawRij[C.postcode]||'').trim(),
       woonplaats:(nawRij[C.woonplaats]||'').trim(),
-      aanschrijfnaam:(nawRij[C.aanschrijfnaam]||'').trim()
+      aanschrijfnaam:(nawRij[C.aanschrijfnaam]||'').trim(),
+      email:(nawRij[C.email]||'').trim()
     }:null;
     // Punt 4: check dubbele ATC-groepen (mogelijke dubbele therapie)
     const atcGrpCount={};
@@ -2043,6 +2249,25 @@ function renderAll(){
   document.getElementById('sP').textContent=pats.length;
   document.getElementById('sK').textContent=kandPats;
   document.getElementById('sR').textContent=aanb;
+  // Periode in bestand
+  if(allDates.length>=2){
+    const parseDatum=d=>{
+      if(!d)return null;
+      let dt=new Date(d);
+      if(!isNaN(dt.getTime()))return dt;
+      // Probeer DD-MM-YYYY
+      const m=d.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+      if(m)dt=new Date(`${m[3]}-${m[2]}-${m[1]}`);
+      return isNaN(dt.getTime())?null:dt;
+    };
+    const fmtD=d=>{const dt=parseDatum(d);return dt?dt.toLocaleDateString('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric'}):d;};
+    // Sorteer op werkelijke datumwaarde zodat oudste/nieuwste correct is
+    const gesorteerd=[...allDates].filter(d=>parseDatum(d)).sort((a,b)=>parseDatum(a)-parseDatum(b));
+    if(gesorteerd.length>=2){
+      document.getElementById('sPeriode').textContent=fmtD(gesorteerd[0])+' → '+fmtD(gesorteerd[gesorteerd.length-1]);
+      document.getElementById('sPeriodePill').style.display='';
+    }
+  }
   document.getElementById('sAdh').textContent=avgAdh!==null?avgAdh+'%':'—';
   document.getElementById('sPeil').textContent=peilDate;
 
@@ -2062,7 +2287,9 @@ function renderAll(){
   // Toon tabs die data nodig hebben
   const thb=document.getElementById('tabHuisartsBtn');if(thb)thb.style.display='';
   const tab2=document.getElementById('tabAfgehandeldBtn');if(tab2)tab2.style.display='';
+  const tabG=document.getElementById('tabGemistBtn');if(tabG)tabG.style.display='';
   const bpr=document.getElementById('btnPrint');if(bpr)bpr.style.display='inline-flex';
+  bijwerkGemistBadge();
 }
 
 // ═══════════════════════════════════════════
@@ -2269,7 +2496,7 @@ function renderPatList(search=''){
   const sf=document.getElementById('filterKand').value;
   const sort=document.getElementById('sortPat').value;
   // Gebruik pre-berekende _searchBlob (pid + medicijnnamen, lowercase)
-  let filtered=patSumms.filter(p=>(!sq||p._searchBlob.includes(sq))&&(!sf||p.kandidaat===sf)&&(selectedHuisartsen.size===0||selectedHuisartsen.has(p.huisarts))&&(!showOnlyKandidaten||(p.aanb>=1||p.overw>=1))&&!donePids.has(p.pid));
+  let filtered=patSumms.filter(p=>(!sq||p._searchBlob.includes(sq))&&(!sf||p.kandidaat===sf)&&(selectedHuisartsen.size===0||selectedHuisartsen.has(p.huisarts))&&(!showOnlyKandidaten||(p.aanb>=1||p.overw>=1))&&(!verbergOngeschikte||p.aanb>0||p.overw>0||p.onges===0)&&!donePids.has(p.pid));
   if(sort==='score')filtered.sort((a,b)=>b.sortScore-a.sortScore);
   else if(sort==='adh')filtered.sort((a,b)=>(b.avgAdh||0)-(a.avgAdh||0));
   else if(sort==='pid')filtered.sort((a,b)=>a.pid.localeCompare(b.pid));
@@ -2892,7 +3119,7 @@ function renderCharts(){
   const atcC={};rawRows.forEach(r=>{const g=ATC_N[r[C.atc]?.[0]?.toUpperCase()];if(g)atcC[g]=(atcC[g]||0)+1;});
   charts.cat=mkDough('cCat',Object.keys(atcC),Object.values(atcC),pal);
   const stC={};analysis.forEach(m=>{stC[m.status]=(stC[m.status]||0)+1;});
-  const stCol={'Aanbevolen':'#10b981','Overwegen':'#f59e0b','Uitgesloten':'#ef4444','Wisselende dosering':'#f59e0b'};
+  const stCol={'Aanbevolen':'#10b981','Overwegen':'#f59e0b','Ongeschikt':'#ef4444','Uitgesloten':'#ef4444','Wisselende dosering':'#f59e0b','Dosering trombosedienst':'#6b7280','Farmaceutische vorm':'#6b7280'};
   charts.st=new Chart(document.getElementById('cStatus'),{type:'bar',data:{labels:Object.keys(stC),datasets:[{data:Object.values(stC),backgroundColor:Object.keys(stC).map(s=>stCol[s]||'#64748b'),borderRadius:5}]},options:{responsive:true,plugins:{legend:{display:false}},scales:{x:{...ds},y:{...ds}}}});
   const bins={'<40%':0,'40–60%':0,'60–80%':0,'≥80%':0,'Onbekend':0};
   analysis.forEach(m=>{if(m.adh.pct===null)bins['Onbekend']++;else if(m.adh.pct<40)bins['<40%']++;else if(m.adh.pct<60)bins['40–60%']++;else if(m.adh.pct<80)bins['60–80%']++;else bins['≥80%']++;});
@@ -2912,9 +3139,12 @@ function mkDough(id,labels,data,colors){return new Chart(document.getElementById
 // TABS
 // ═══════════════════════════════════════════
 function switchTab(id,el){
-  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>{t.classList.remove('active');t.style.display='none';});
   document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tab-'+id).classList.add('active');el.classList.add('active');
+  const target=document.getElementById('tab-'+id);
+  target.classList.add('active');
+  target.style.display='flex';
+  el.classList.add('active');
   activeTab=id;
   // Reset meer-menu knop stijl als we terug naar primaire tab gaan
   const mmb=document.getElementById('meerMenuBtn');if(mmb)mmb.classList.remove('active');
@@ -2923,6 +3153,7 @@ function switchTab(id,el){
   else if(id==='grafieken')renderDirtyTab('grafieken');
   else if(id==='huisartsen')renderDirtyTab('huisartsen');
   else if(id==='afgehandeld')renderDirtyTab('afgehandeld');
+  else if(id==='gemist')renderGemistTab();
   // Toon/verberg patiënt-toolbar items
   const isKand=id==='kandidaten';
   document.getElementById('btnKandFilter').style.display=isKand?'':'none';
@@ -2934,7 +3165,7 @@ function switchTab(id,el){
   if(combo)combo.style.display=isKand&&huisartsAll.length>0?'':'none';
 }
 
-function statusBadge(s){const m={'Aanbevolen':'bg ✅','Overwegen':'ba ⚠️','Uitgesloten':'br ❌','Wisselende dosering':'ba ~'};const[c,...r]=(m[s]||'bgr '+s).split(' ');return`<span class="badge ${c}">${r.join(' ')||s}</span>`;}
+function statusBadge(s){const m={'Aanbevolen':'bg ✅','Overwegen':'ba ⚠️','Ongeschikt':'br 🚫','Uitgesloten':'br ❌','Wisselende dosering':'ba ~','Dosering trombosedienst':'bgr 📋','Farmaceutische vorm':'bgr 🧴'};const[c,...r]=(m[s]||'bgr '+s).split(' ');return`<span class="badge ${c}">${r.join(' ')||s}</span>`;}
 
 // ═══════════════════════════════════════════
 // EXPORT XLSX
@@ -2949,7 +3180,7 @@ function exportXLSX(onlyDone=false,onlyFiltered=false,onlySel=false){
 
   function cs(val,field){
     const b={font:{name:'Arial',sz:10},alignment:{vertical:'center'}};
-    if(field==='status'){if(val==='Aanbevolen')return{...b,font:{...b.font,bold:true,color:{rgb:'065F46'}},fill:{fgColor:{rgb:'D1FAE5'}}};if(val==='Overwegen')return{...b,font:{...b.font,bold:true,color:{rgb:'92400E'}},fill:{fgColor:{rgb:'FEF3C7'}}};if(val==='Uitgesloten')return{...b,font:{...b.font,color:{rgb:'991B1B'}},fill:{fgColor:{rgb:'FEE2E2'}}};}
+    if(field==='status'){if(val==='Aanbevolen')return{...b,font:{...b.font,bold:true,color:{rgb:'065F46'}},fill:{fgColor:{rgb:'D1FAE5'}}};if(val==='Overwegen')return{...b,font:{...b.font,bold:true,color:{rgb:'92400E'}},fill:{fgColor:{rgb:'FEF3C7'}}};if(val==='Uitgesloten')return{...b,font:{...b.font,color:{rgb:'991B1B'}},fill:{fgColor:{rgb:'FEE2E2'}}};if(val==='Ongeschikt')return{...b,font:{...b.font,bold:true,color:{rgb:'991B1B'}},fill:{fgColor:{rgb:'FEE2E2'}}};if(val==='Dosering trombosedienst')return{...b,font:{...b.font,color:{rgb:'374151'}},fill:{fgColor:{rgb:'F3F4F6'}}};if(val==='Farmaceutische vorm')return{...b,font:{...b.font,color:{rgb:'374151'}},fill:{fgColor:{rgb:'F3F4F6'}}};}
     if(field==='adh'){const n=parseInt(val);if(isNaN(n))return b;if(n>=80)return{...b,font:{...b.font,bold:true,color:{rgb:'065F46'}},fill:{fgColor:{rgb:'D1FAE5'}}};if(n>=60)return{...b,font:{...b.font,color:{rgb:'92400E'}},fill:{fgColor:{rgb:'FEF3C7'}}};return{...b,font:{...b.font,color:{rgb:'991B1B'}},fill:{fgColor:{rgb:'FEE2E2'}}};}
     return b;
   }
@@ -2993,7 +3224,7 @@ function exportXLSX(onlyDone=false,onlyFiltered=false,onlySel=false){
   XLSX.utils.book_append_sheet(wb,ws3,'Tijdlijn');
 
   // TAB 4: Legenda
-  const leg=[['HerhaalModule Analyser — Exportrapport',''],['Datum export',dateStr],['',''],['INSTELLINGEN',''],['Min. behandelduur',document.getElementById('sMonths').value+' mnd'],['Min. verstrekkingen',document.getElementById('sPresc').value],['Herhaalmarge',document.getElementById('sMargin').value+' dagen'],['Vaste dosering vereist',document.getElementById('togDose').checked?'Ja':'Nee'],['',''],['STATUSSEN',''],['Aanbevolen','Score ≥ 55, voldoet aan alle criteria'],['Overwegen','Voldoet aan basis maar score < 65'],['Uitgesloten','Onvoldoende verstrekkingen of behandelduur'],['Wisselende dosering','Doseringscode varieert'],['',''],['THERAPIETROUW',''],['Op tijd','Herhaling binnen ± marge van verwachte datum (EU/TU/VU tellen alle mee)'],['Te laat','> marge na verwachte datum (medicatie tekort)'],['Te vroeg','> marge vóór verwachte datum']];
+  const leg=[['HerhaalModule Analyser — Exportrapport',''],['Datum export',dateStr],['',''],['INSTELLINGEN',''],['Min. behandelduur',document.getElementById('sMonths').value+' mnd'],['Min. verstrekkingen',document.getElementById('sPresc').value],['Herhaalmarge',document.getElementById('sMargin').value+' dagen'],['Vaste dosering vereist',document.getElementById('togDose').checked?'Ja':'Nee'],['',''],['STATUSSEN',''],['Aanbevolen','Score ≥ 55, voldoet aan alle criteria'],['Overwegen','Voldoet aan basis maar score < 65'],['Uitgesloten','Onvoldoende verstrekkingen of behandelduur'],['Wisselende dosering','Doseringscode varieert'],['Ongeschikt','Therapietrouw te laag (< 70%) — niet geschikt voor opname in herhaalservice'],['Dosering trombosedienst','Dosering wordt extern bepaald (trombosedienst) — ophaalpatroon zichtbaar ter informatie'],['Farmaceutische vorm','Crème, zalf, gel of insuline — verbruiksduur niet betrouwbaar te berekenen'],['',''],['THERAPIETROUW',''],['Op tijd','Herhaling binnen ± marge van verwachte datum (EU/TU/VU tellen alle mee)'],['Te laat','> marge na verwachte datum (medicatie tekort)'],['Te vroeg','> marge vóór verwachte datum']];
   const ws4={};leg.forEach((row,ri)=>row.forEach((val,ci)=>{ws4[XLSX.utils.encode_cell({r:ri,c:ci})]={v:val,t:'s',s:{font:{name:'Arial',sz:ri===0?12:10,bold:ri===0||[3,9,15].includes(ri)},alignment:{vertical:'center'}}};}));
   ws4['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:leg.length,c:1}});ws4['!cols']=[{wch:32},{wch:55}];
   XLSX.utils.book_append_sheet(wb,ws4,'Legenda');
@@ -3226,6 +3457,10 @@ function updateStepper(step){
   });
 }
 
+function opslaanVerbergOngeschikte(){
+  try{localStorage.setItem('verbergOngeschikte', verbergOngeschikte?'1':'0');}catch(e){}
+}
+
 // ═══════════════════════════════════════════
 // SESSIE OPSLAAN / HERSTELLEN
 // ═══════════════════════════════════════════
@@ -3239,6 +3474,8 @@ function saveSession(){
       notes:notes,
       exclusieMeds:[...exclusieMeds],
       briefMedSelectie:Object.fromEntries(Object.entries(briefMedSelectie).map(([pid,set])=>[pid,[...set]])),
+      gemistActies,
+      gemistTijdvenster,
     };
     localStorage.setItem('herhaalSession',JSON.stringify(data));
   }catch(e){}
@@ -3256,6 +3493,19 @@ function restoreSession(){
     if(data.briefVerstuurd)Object.assign(briefVerstuurd,data.briefVerstuurd);
     if(data.exclusieMeds)data.exclusieMeds.forEach(m=>exclusieMeds.add(m));
     if(data.briefMedSelectie)Object.entries(data.briefMedSelectie).forEach(([pid,arr])=>{briefMedSelectie[pid]=new Set(arr);});
+    if(data.gemistActies)Object.assign(gemistActies,data.gemistActies);
+    if(data.gemistTijdvenster){
+      gemistTijdvenster=data.gemistTijdvenster;
+      const sel=document.getElementById('gemistTijdvensterSelect');
+      if(sel)sel.value=String(gemistTijdvenster);
+    }
+    // Herstel verbergOngeschikte instelling (aparte key)
+    const vO=localStorage.getItem('verbergOngeschikte');
+    if(vO!==null){
+      verbergOngeschikte=(vO==='1');
+      const tog=document.getElementById('togVerbergOngeschikt');
+      if(tog)tog.checked=verbergOngeschikte;
+    }
 
   }catch(e){}
 }
@@ -3264,6 +3514,7 @@ function clearSession(){
   try{localStorage.removeItem('herhaalSession');}catch(e){}
   donePids.clear();selectedPids.clear();selectedHuisartsen.clear();
   doneTimestamps={}; briefVerstuurd={}; briefMedSelectie={}; briefMedPending={};
+  gemistActies={}; gemistTijdvenster=90;
   cachedPatSumm=[];
   renderPatList();renderHuisartsTags();
   notify('Sessie gewist','info');
@@ -3520,7 +3771,7 @@ function getOpgeslagenHash(){
   try{return localStorage.getItem('appPasswordHash')||APP_PASSWORD_HASH;}catch(e){return APP_PASSWORD_HASH;}
 }
 
-const WORKER_CODE="\n// ── HerhaalModule Analyse Worker v2 ──\n// Merkdeduplicatie: groepeer op pid|atc|sterkte ipv pid|atc|naam\n// Exclusies: handmatig uitgesloten middelen\n// Inactiviteit: patiënten met laatste verstrekking ouder dan maxInactief dagen\n// Continuïteit: gaten >180d tellen niet mee als behandelduur\n\nconst C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18,naamPartner:20,naamPat:21,adres:22,postcode:23,woonplaats:24};\nconst ATC_N={'A':'Maag/Metabolisme','B':'Bloed','C':'Cardiovasculair','D':'Dermatologie','G':'Urogenitaal','H':'Hormonen','J':'Anti-infectieus','L':'Oncologie','M':'Bewegingsapparaat','N':'Zenuwstelsel','P':'Antiparasitica','R':'Luchtwegen','S':'Zintuigen','V':'Diversen'};\nconst ATC_WHITELIST={'A02':1,'A10':1,'A11':1,'A12':1,'B01':1,'C02':1,'C03':1,'C07':1,'C08':1,'C09':1,'C10':1,'G03':1,'G04':1,'H03':1,'M04':1,'M05':1,'N03A':1,'N04B':1,'N06A':1,'N06D':1,'R03':1,'V01':1};\nconst ATC_BLACKLIST={'N02A':1,'N06BA':1,'N05B':1,'N05C':1,'N05A':1,'N07BC':1,'N07BB':1,'N01A':1,'N02AB':1,'N02BG':1,'L01':1,'L04':1,'H02':1,'J01':1,'J05':1};\n\nfunction isBlacklisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_BLACKLIST).some(k=>atc.startsWith(k));}\nfunction isWhitelisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_WHITELIST).some(k=>atc.startsWith(k));}\n\nfunction extractSterkte(naam){\n  const m=(naam||'').toUpperCase().match(/(\\d+(?:[,.]\\d+)?)\\s*(MCG|MG|G|ML|IE|MMOL|%)/);\n  return m?m[1].replace(',','.')+m[2]:'';\n}\n\nfunction parseDailyDose(kode){\n  if(!kode)return null;\n  kode=kode.trim().toUpperCase();\n  let fpd=null;\n  const mWr=kode.match(/^(\\d+)-(\\d+)W/);if(mWr){fpd=((+mWr[1])+(+mWr[2]))/2/7;}\n  const mDr=kode.match(/^(\\d+)-(\\d+)D/);if(mDr){fpd=((+mDr[1])+(+mDr[2]))/2;}\n  const mW=kode.match(/^(\\d+(?:\\.\\d+)?)W/);if(mW&&fpd===null){fpd=+mW[1]/7;}\n  const mD=kode.match(/^(\\d+(?:\\.\\d+)?)D/);if(mD&&fpd===null){fpd=+mD[1];}\n  if(fpd===null)return null;\n  let amt=1;\n  const mA=kode.match(/[DW](\\d+(?:\\.\\d+)?)/);if(mA)amt=+mA[1];\n  if(kode.match(/[DW]0\\.5/))amt=0.5;\n  return fpd*amt;\n}\n\nfunction calcAdherence(dates,aantallen,dkode,margin){\n  if(dates.length<2)return{pct:null,onTime:0,miss:0,late:0,events:[]};\n  const daily=parseDailyDose(dkode);\n  const events=[];let onTime=0,miss=0,late=0;\n  dates.forEach((d,i)=>{\n    const ev={date:d,datum:new Date(d).toISOString().slice(0,10),aantal:aantallen[i],type:i===0?'eu':'ok'};\n    if(i>0&&daily){\n      const prev=new Date(dates[i-1]);\n      prev.setDate(prev.getDate()+Math.round(aantallen[i-1]/daily));\n      const cur=new Date(d);\n      const diff=Math.round((cur-prev)/(864e5));\n      ev.diff=diff;ev.expected=prev.toISOString();\n      if(Math.abs(diff)<=margin){ev.type='ok';onTime++;}\n      else if(diff>margin){ev.type='miss';miss++;}\n      else{ev.type='late';late++;}\n    }\n    events.push(ev);\n  });\n  const tot=onTime+miss+late;\n  return{pct:tot>0?Math.round(onTime/tot*100):null,onTime,miss,late,events};\n}\n\nfunction calcContinuousMonths(dates){\n  // Bereken behandelduur rekening houdend met continuïteit\n  // Een gat van >180 dagen = nieuwe episode, tel alleen de meest recente episode\n  if(dates.length<2)return 0;\n  let episodeStart=new Date(dates[0]);\n  for(let i=1;i<dates.length;i++){\n    const gap=Math.round((new Date(dates[i])-new Date(dates[i-1]))/864e5);\n    if(gap>180)episodeStart=new Date(dates[i]); // nieuwe episode na lang gat\n  }\n  const lastD=new Date(dates[dates.length-1]);\n  return Math.round((lastD-episodeStart)/(864e5*30));\n}\n\nfunction calcScore(count,months,fixed,adhPct,hasDose,c,isWL){\n  let s=0;\n  s+=Math.min(count/c.minP,2)*17.5;\n  s+=Math.min(months/c.minM,2)*17.5;\n  if(fixed)s+=8;\n  if(hasDose&&adhPct!==null){\n    s+=Math.round(adhPct*.4);\n    if(adhPct<60)s-=10;\n  } else if(!hasDose){s+=20;}\n  if(isWL)s+=9;\n  return Math.round(Math.min(Math.max(s,0),100));\n}\n\nfunction calcStatus(count,months,fixed,c,score){\n  if(count<c.minP)return'Uitgesloten';\n  if(months<c.minM)return'Uitgesloten';\n  if(c.reqF&&!fixed)return'Wisselende dosering';\n  return score>=55?'Aanbevolen':'Overwegen';\n}\n\nfunction redenAfwijzing(count,months,fixed,c,status){\n  if(status==='Aanbevolen')return null;\n  if(status==='Overwegen')return'Voldoet aan criteria maar score is laag';\n  if(status==='Wisselende dosering')return'Dosering wisselt — niet geschikt';\n  const r=[];\n  if(count<c.minP)r.push('Te weinig herhalingen ('+count+' van '+c.minP+' nodig)');\n  if(months<c.minM)r.push('Te kort onder behandeling ('+months+' van '+c.minM+' maanden)');\n  return r.join(' · ')||'Onvoldoende gegevens';\n}\n\nself.onmessage=function(e){\n  const {rawRows,crit:c,atcEnabled,extraWhitelistMeds,exclusieMeds}=e.data;\n  const extraSet=new Set(extraWhitelistMeds||[]);\n  const exclusieSet=new Set((exclusieMeds||[]).map(s=>s.toLowerCase()));\n  const maxInactief=c.maxInactief||90;\n\n  function isWLorExtra(atc,naam){\n    if(isWhitelisted(atc)&&!isBlacklisted(atc))return true;\n    const naamL=(naam||'').toLowerCase();for(const k of extraSet){if(naamL.includes(k))return true;}return false;\n  }\n\n  function isUitgesloten(atc,naam){\n    const naamL=(naam||'').toLowerCase();\n    const atcU=(atc||'').toUpperCase();\n    for(const k of exclusieSet){\n      if(naamL.includes(k))return true;\n      if(atcU.startsWith(k.toUpperCase()))return true;\n    }\n    return false;\n  }\n\n  // Bepaal peildatum (meest recente datum in dataset)\n  let peilTs=0;\n  rawRows.forEach(r=>{const d=r[C.datum];if(d){const t=new Date(d).getTime();if(t>peilTs)peilTs=t;}});\n  const peilDatum=peilTs?new Date(peilTs):new Date();\n\n  // Bepaal laatste verstrekking per patiënt voor inactiviteitscheck\n  const patLaatst={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim();\n    const datum=r[C.datum];\n    if(pid&&datum){\n      const t=new Date(datum).getTime();\n      if(!patLaatst[pid]||t>patLaatst[pid])patLaatst[pid]=t;\n    }\n  });\n\n  // Groepeer op pid|atc|sterkte (merkdeduplicatie)\n  const grps={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim(),atc=(r[C.atc]||'').trim(),naam=(r[C.naam]||'').trim();\n    const dist=(r[C.dist]||'').trim(),herk=(r[C.herk]||'').trim(),uitg=(r[C.uitg]||'').trim();\n    const dkode=(r[C.dkode]||'').trim(),datum=(r[C.datum]||'').trim(),aantal=parseInt(r[C.aantal]||'0')||0;\n    if(!atc||atc==='0'||!naam||!pid)return;\n    if(dist!=='N')return;\n    if(herk==='D')return;\n    if(isBlacklisted(atc))return;\n    if(isUitgesloten(atc,naam))return;\n    const dkodeUpper=dkode.toUpperCase();\n    const omschrUpper=(r[9]||'').toUpperCase();\n    if(/\\bZN\\b/.test(dkodeUpper)||omschrUpper.includes('ZO NODIG')||omschrUpper.includes('INDIEN NODIG'))return;\\n    // Variabele dosering (bereik): bijv 1-2D1T, 3-6D1T — niet geschikt voor herhaalservice\\n    if(/^\\\\d+-\\\\d+[DW]/i.test(dkode))return;\n    if(c.exclOZ&&(herk==='Z'||uitg==='ONB'))return;\n    const a3=atc.slice(0,3).toUpperCase();\n    if(atcEnabled[a3]===false)return;\n    // Inactiviteitscheck: sla patiënt over als laatste verstrekking te lang geleden\n    const patTs=patLaatst[pid]||0;\n    const dagsSinds=Math.round((peilDatum.getTime()-patTs)/864e5);\n    if(dagsSinds>maxInactief)return;\n    // Merkdeduplicatie: groepeer op pid|atc|sterkte\n    const sterkte=extractSterkte(naam);\n    const key=pid+'|'+atc+'|'+sterkte;\n    if(!grps[key])grps[key]={pid,atc,naam,sterkte,namen:new Set(),dkodes:[],entries:[]};\n    grps[key].namen.add(naam);\n    if(!grps[key].dkodes.includes(dkode))grps[key].dkodes.push(dkode);\n    if(datum)grps[key].entries.push({date:datum,datum,aantal,uitg,herk});\n  });\n\n  const analysis=Object.values(grps).map(g=>{\n    g.entries.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);\n    const dates=g.entries.map(e=>e.date);\n    const aantallen=g.entries.map(e=>e.aantal);\n    // Gebruik de meest voorkomende naam als weergavenaam\n    const naamFreq={};\n    g.namen.forEach(n=>{naamFreq[n]=(naamFreq[n]||0)+1;});\n    const weergaveNaam=Object.entries(naamFreq).sort((a,b)=>b[1]-a[1])[0]?.[0]||g.naam;\n    const aantalMerken=g.namen.size;\n    const months=calcContinuousMonths(dates);\n    const fixedDose=new Set(g.dkodes).size<=1;\n    const count=g.entries.length;\n    const mainDkode=g.dkodes.filter(d=>d&&d.length>1&&!/^\\d{4}-\\d{2}/.test(d))[0]||'';\n    const daily=parseDailyDose(mainDkode);\n    const adh=calcAdherence(dates,aantallen,mainDkode,c.margin);\n    const atcGrp=ATC_N[g.atc[0]?.toUpperCase()]||g.atc[0]?.toUpperCase()||'';\n    const isWL=isWLorExtra(g.atc,weergaveNaam);\n    const score=calcScore(count,months,fixedDose,adh.pct,!!mainDkode,c,isWL);\n    const status=calcStatus(count,months,fixedDose,c,score);\n    const herkM=g.entries.reduce((a,e)=>{a[e.herk]=(a[e.herk]||0)+1;return a},{});\n    const topHerk=Object.entries(herkM).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';\n    const lastDate=dates[dates.length-1];\n    const reden=redenAfwijzing(count,months,fixedDose,c,status);\n    const duurSignaal=months>=12?'stabiel':months<=1?'kort':'';\n    return{pid:g.pid,atc:g.atc,naam:weergaveNaam,aantalMerken,sterkte:g.sterkte,months,fixedDose,count,mainDkode,daily,adh,atcGrp,score,status,reden,duurSignaal,topHerk,dates,aantallen,isWL,lastDate,entries:g.entries};\n  }).filter(m=>m.naam);\n\n  self.postMessage({analysis});\n};\n";;
+const WORKER_CODE="\n// ── HerhaalModule Analyse Worker v2 ──\n// Merkdeduplicatie: groepeer op pid|atc|sterkte ipv pid|atc|naam\n// Exclusies: handmatig uitgesloten middelen\n// Inactiviteit: patiënten met laatste verstrekking ouder dan maxInactief dagen\n// Continuïteit: gaten >180d tellen niet mee als behandelduur\n\nconst C={pid:0,atc:2,naam:6,aantal:7,dkode:8,cf:10,herk:11,dist:12,locatie:14,uitg:16,datum:17,huisarts:18,naamPartner:20,naamPat:21,adres:22,postcode:23,woonplaats:24};\nconst ATC_N={'A':'Maag/Metabolisme','B':'Bloed','C':'Cardiovasculair','D':'Dermatologie','G':'Urogenitaal','H':'Hormonen','J':'Anti-infectieus','L':'Oncologie','M':'Bewegingsapparaat','N':'Zenuwstelsel','P':'Antiparasitica','R':'Luchtwegen','S':'Zintuigen','V':'Diversen'};\nconst ATC_WHITELIST={'A02':1,'A10':1,'A11':1,'A12':1,'B01':1,'C01':1,'C02':1,'C03':1,'C07':1,'C08':1,'C09':1,'C10':1,'G03':1,'G04':1,'H03':1,'M04':1,'M05':1,'N03A':1,'N04B':1,'N06A':1,'N06D':1,'R03':1,'V01':1};\nconst ATC_BLACKLIST={'N02A':1,'N06BA':1,'N05B':1,'N05C':1,'N05A':1,'N07BC':1,'N07BB':1,'N01A':1,'N02AB':1,'N02BG':1,'L01':1,'L04':1,'H02':1,'J01':1,'J05':1};\n\nfunction isBlacklisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_BLACKLIST).some(k=>atc.startsWith(k));}\nfunction isWhitelisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_WHITELIST).some(k=>atc.startsWith(k));}\n\nconst VORM_EXCLUSIES=['CREME','CRÈME','ZALF','GEL','LOTION','EMULSIE','OOGZALF','OOGDRUPPEL'];\nconst ATC_VORM_UITSLUIT={'A10A':1};\nconst ADH_DREMPEL=70;\nconst NAAM_EXCLUSIES=['alutard','sustanon','implanon','sildenafil','thiamine','salbutamol','lenzet'];\nconst ZICHTBAAR_NAAM_EXCLUSIES=['acenocoumarol'];\nfunction isNaamUitgesloten(naam){const naamL=(naam||'').toLowerCase();return NAAM_EXCLUSIES.some(t=>naamL.includes(t));}\nfunction isZichtbaarNaamUitgesloten(naam){const naamL=(naam||'').toLowerCase();return ZICHTBAAR_NAAM_EXCLUSIES.some(t=>naamL.includes(t));}\nfunction isVormUitgesloten(atc,naam){const naamU=(naam||'').toUpperCase();const atcU=(atc||'').toUpperCase();if(Object.keys(ATC_VORM_UITSLUIT).some(k=>atcU.startsWith(k)))return true;return VORM_EXCLUSIES.some(t=>naamU.includes(t));}\n\nfunction extractSterkte(naam){\n  const m=(naam||'').toUpperCase().match(/(\\d+(?:[,.]\\d+)?)\\s*(MCG|MG|G|ML|IE|MMOL|%)/);\n  return m?m[1].replace(',','.')+m[2]:'';\n}\n\nfunction parseDailyDose(kode){\n  if(!kode)return null;\n  kode=kode.trim().toUpperCase();\n  let fpd=null;\n  const mWr=kode.match(/^(\\d+)-(\\d+)W/);if(mWr){fpd=((+mWr[1])+(+mWr[2]))/2/7;}\n  const mDr=kode.match(/^(\\d+)-(\\d+)D/);if(mDr){fpd=((+mDr[1])+(+mDr[2]))/2;}\n  const mW=kode.match(/^(\\d+(?:\\.\\d+)?)W/);if(mW&&fpd===null){fpd=+mW[1]/7;}\n  const mD=kode.match(/^(\\d+(?:\\.\\d+)?)D/);if(mD&&fpd===null){fpd=+mD[1];}\n  if(fpd===null)return null;\n  let amt=1;\n  const mA=kode.match(/[DW](\\d+(?:\\.\\d+)?)/);if(mA)amt=+mA[1];\n  if(kode.match(/[DW]0\\.5/))amt=0.5;\n  return fpd*amt;\n}\n\nfunction calcAdherence(dates,aantallen,dkode,margin){\n  if(dates.length<2)return{pct:null,onTime:0,miss:0,late:0,events:[]};\n  const daily=parseDailyDose(dkode);\n  const events=[];let onTime=0,miss=0,late=0;\n  dates.forEach((d,i)=>{\n    const ev={date:d,datum:new Date(d).toISOString().slice(0,10),aantal:aantallen[i],type:i===0?'eu':'ok'};\n    if(i>0&&daily){\n      const prev=new Date(dates[i-1]);\n      prev.setDate(prev.getDate()+Math.round(aantallen[i-1]/daily));\n      const cur=new Date(d);\n      const diff=Math.round((cur-prev)/(864e5));\n      ev.diff=diff;ev.expected=prev.toISOString();\n      if(Math.abs(diff)<=margin){ev.type='ok';onTime++;}\n      else if(diff>margin){ev.type='miss';miss++;}\n      else{ev.type='late';late++;}\n    }\n    events.push(ev);\n  });\n  const tot=onTime+miss+late;\n  return{pct:tot>0?Math.round(onTime/tot*100):null,onTime,miss,late,events};\n}\n\nfunction calcContinuousMonths(dates){\n  // Bereken behandelduur rekening houdend met continuïteit\n  // Een gat van >180 dagen = nieuwe episode, tel alleen de meest recente episode\n  if(dates.length<2)return 0;\n  let episodeStart=new Date(dates[0]);\n  for(let i=1;i<dates.length;i++){\n    const gap=Math.round((new Date(dates[i])-new Date(dates[i-1]))/864e5);\n    if(gap>180)episodeStart=new Date(dates[i]); // nieuwe episode na lang gat\n  }\n  const lastD=new Date(dates[dates.length-1]);\n  return Math.round((lastD-episodeStart)/(864e5*30));\n}\n\nfunction calcScore(count,months,fixed,adhPct,hasDose,c,isWL){\n  let s=0;\n  s+=Math.min(count/c.minP,2)*17.5;\n  s+=Math.min(months/c.minM,2)*17.5;\n  if(fixed)s+=8;\n  if(hasDose&&adhPct!==null){\n    s+=Math.round(adhPct*.4);\n    if(adhPct<60)s-=10;\n  } else if(!hasDose){s+=20;}\n  if(isWL)s+=9;\n  return Math.round(Math.min(Math.max(s,0),100));\n}\n\nfunction calcStatus(count,months,fixed,c,score,adhPct){\n  if(count<c.minP)return'Uitgesloten';\n  if(months<c.minM)return'Uitgesloten';\n  if(c.reqF&&!fixed)return'Wisselende dosering';\n  if(adhPct!==null&&adhPct!==undefined&&adhPct<ADH_DREMPEL)return'Ongeschikt';\n  return score>=55?'Aanbevolen':'Overwegen';\n}\n\nfunction redenAfwijzing(count,months,fixed,c,status,score,adhPct){\n  if(status==='Aanbevolen')return null;\n  if(status==='Ongeschikt')return'Therapietrouw te laag ('+adhPct+'% < '+ADH_DREMPEL+'%) — controleer ophaalpatroon voor opname in herhaalservice';\n  if(status==='Overwegen')return'Voldoet aan criteria maar score is laag';\n  if(status==='Wisselende dosering')return'Dosering wisselt — niet geschikt';\n  if(status==='Dosering trombosedienst')return'Dosering wordt extern bepaald (trombosedienst) — ophaalpatroon zichtbaar ter informatie';\n  if(status==='Farmaceutische vorm')return'Crème, zalf, gel of insuline — verbruiksduur niet betrouwbaar te berekenen';\n  const r=[];\n  if(count<c.minP)r.push('Te weinig herhalingen ('+count+' van '+c.minP+' nodig)');\n  if(months<c.minM)r.push('Te kort onder behandeling ('+months+' van '+c.minM+' maanden)');\n  return r.join(' · ')||'Onvoldoende gegevens';\n}\n\nself.onmessage=function(e){\n  const {rawRows,crit:c,atcEnabled,extraWhitelistMeds,exclusieMeds}=e.data;\n  const extraSet=new Set(extraWhitelistMeds||[]);\n  const exclusieSet=new Set((exclusieMeds||[]).map(s=>s.toLowerCase()));\n  const maxInactief=c.maxInactief||90;\n\n  function isWLorExtra(atc,naam){\n    if(isWhitelisted(atc)&&!isBlacklisted(atc))return true;\n    const naamL=(naam||'').toLowerCase();for(const k of extraSet){if(naamL.includes(k))return true;}return false;\n  }\n\n  function isUitgesloten(atc,naam){\n    const naamL=(naam||'').toLowerCase();\n    const atcU=(atc||'').toUpperCase();\n    for(const k of exclusieSet){\n      if(naamL.includes(k))return true;\n      if(atcU.startsWith(k.toUpperCase()))return true;\n    }\n    return false;\n  }\n\n  // Bepaal peildatum (meest recente datum in dataset)\n  let peilTs=0;\n  rawRows.forEach(r=>{const d=r[C.datum];if(d){const t=new Date(d).getTime();if(t>peilTs)peilTs=t;}});\n  const peilDatum=peilTs?new Date(peilTs):new Date();\n\n  // Bepaal laatste verstrekking per patiënt voor inactiviteitscheck\n  const patLaatst={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim();\n    const datum=r[C.datum];\n    if(pid&&datum){\n      const t=new Date(datum).getTime();\n      if(!patLaatst[pid]||t>patLaatst[pid])patLaatst[pid]=t;\n    }\n  });\n\n  // Groepeer op pid|atc|sterkte (merkdeduplicatie)\n  const grps={};\n  rawRows.forEach(r=>{\n    const pid=(r[C.pid]||'').trim(),atc=(r[C.atc]||'').trim(),naam=(r[C.naam]||'').trim();\n    const dist=(r[C.dist]||'').trim(),herk=(r[C.herk]||'').trim(),uitg=(r[C.uitg]||'').trim();\n    const dkode=(r[C.dkode]||'').trim(),datum=(r[C.datum]||'').trim(),aantal=parseInt(r[C.aantal]||'0')||0;\n    if(!atc||atc==='0'||!naam||!pid)return;\n    if(dist!=='N')return;\n    if(herk==='D')return;\n    if(isBlacklisted(atc))return;\n    if(isUitgesloten(atc,naam))return;\n    if(isNaamUitgesloten(naam))return;\n    const dkodeUpper=dkode.toUpperCase();\n    const omschrUpper=(r[9]||'').toUpperCase();\n    if(/\\bZN\\b/.test(dkodeUpper)||omschrUpper.includes('ZO NODIG')||omschrUpper.includes('INDIEN NODIG'))return;\\n    // Variabele dosering (bereik): bijv 1-2D1T, 3-6D1T — niet geschikt voor herhaalservice\\n    if(/^\\\\d+-\\\\d+[DW]/i.test(dkode))return;\n    if(c.exclOZ&&(herk==='Z'||uitg==='ONB'))return;\n    const a3=atc.slice(0,3).toUpperCase();\n    if(atcEnabled[a3]===false)return;\n    // Inactiviteitscheck: sla patiënt over als laatste verstrekking te lang geleden\n    const patTs=patLaatst[pid]||0;\n    const dagsSinds=Math.round((peilDatum.getTime()-patTs)/864e5);\n    if(dagsSinds>maxInactief)return;\n    // Merkdeduplicatie: groepeer op pid|atc|sterkte\n    const sterkte=extractSterkte(naam);\n    const key=pid+'|'+atc+'|'+sterkte;\n    if(!grps[key])grps[key]={pid,atc,naam,sterkte,namen:new Set(),dkodes:[],entries:[]};\n    grps[key].namen.add(naam);\n    if(!grps[key].dkodes.includes(dkode))grps[key].dkodes.push(dkode);\n    if(datum)grps[key].entries.push({date:datum,datum,aantal,uitg,herk});\n  });\n\n  const analysis=Object.values(grps).map(g=>{\n    g.entries.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);\n    const dates=g.entries.map(e=>e.date);\n    const aantallen=g.entries.map(e=>e.aantal);\n    // Gebruik de meest voorkomende naam als weergavenaam\n    const naamFreq={};\n    g.namen.forEach(n=>{naamFreq[n]=(naamFreq[n]||0)+1;});\n    const weergaveNaam=Object.entries(naamFreq).sort((a,b)=>b[1]-a[1])[0]?.[0]||g.naam;\n    const aantalMerken=g.namen.size;\n    const months=calcContinuousMonths(dates);\n    const fixedDose=new Set(g.dkodes).size<=1;\n    const count=g.entries.length;\n    const mainDkode=g.dkodes.filter(d=>d&&d.length>1&&!/^\\d{4}-\\d{2}/.test(d))[0]||'';\n    const daily=parseDailyDose(mainDkode);\n    const adh=calcAdherence(dates,aantallen,mainDkode,c.margin);\n    const atcGrp=ATC_N[g.atc[0]?.toUpperCase()]||g.atc[0]?.toUpperCase()||'';\n    const isWL=isWLorExtra(g.atc,weergaveNaam);\n    const score=calcScore(count,months,fixedDose,adh.pct,!!mainDkode,c,isWL);\n    const isVorm=isVormUitgesloten(g.atc,weergaveNaam);\n    const isZichtbaarUitgesl=isZichtbaarNaamUitgesloten(weergaveNaam);\n    const status=isVorm?'Farmaceutische vorm':isZichtbaarUitgesl?'Dosering trombosedienst':calcStatus(count,months,fixedDose,c,score,adh.pct);\n    const herkM=g.entries.reduce((a,e)=>{a[e.herk]=(a[e.herk]||0)+1;return a},{});\n    const topHerk=Object.entries(herkM).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';\n    const lastDate=dates[dates.length-1];\n    const reden=redenAfwijzing(count,months,fixedDose,c,status,score,adh.pct);\n    const duurSignaal=months>=12?'stabiel':months<=1?'kort':'';\n    return{pid:g.pid,atc:g.atc,naam:weergaveNaam,aantalMerken,sterkte:g.sterkte,months,fixedDose,count,mainDkode,daily,adh,atcGrp,score,status,reden,duurSignaal,topHerk,dates,aantallen,isWL,lastDate,entries:g.entries};\n  }).filter(m=>m.naam);\n\n  self.postMessage({analysis});\n};\n";;
 
 function getWorker(){
   if(_analyseWorker)return _analyseWorker;
@@ -3753,20 +4004,592 @@ function switchTabMenu(id){
   const m=document.getElementById('meerMenu');
   if(m)m.style.display='none';
   document.querySelectorAll('.tab-btn').forEach(t=>t.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t=>{t.classList.remove('active');t.style.display='none';});
   const tc=document.getElementById('tab-'+id);
-  if(tc)tc.classList.add('active');
+  if(tc){tc.classList.add('active');tc.style.display='flex';}
   activeTab=id;
   if(id==='middelen')renderDirtyTab('meds');
   else if(id==='grafieken')renderDirtyTab('grafieken');
   else if(id==='huisartsen')renderDirtyTab('huisartsen');
   else if(id==='brieven')renderBrievenTab();
+  else if(id==='gemist')renderGemistTab();
   const bkf=document.getElementById('btnKandFilter');
   if(bkf)bkf.style.display='none';
   const mmb=document.getElementById('meerMenuBtn');
   if(mmb){mmb.style.color='var(--accent-dark)';mmb.style.borderColor='var(--accent)';}
 }
 
+
+// ═══════════════════════════════════════════
+// GEMISTE RECEPTUUR
+// ═══════════════════════════════════════════
+
+// ── Analyse-hulpfuncties (main-thread versie, gespiegeld aan Worker) ──
+const ATC_WHITELIST_MT={'A02':1,'A10':1,'A11':1,'A12':1,'B01':1,'C01':1,'C02':1,'C03':1,'C07':1,'C08':1,'C09':1,'C10':1,'G03':1,'G04':1,'H03':1,'M04':1,'M05':1,'N03A':1,'N04B':1,'N06A':1,'N06D':1,'R03':1,'V01':1};
+const ATC_BLACKLIST_MT={'N02A':1,'N06BA':1,'N05B':1,'N05C':1,'N05A':1,'N07BC':1,'N07BB':1,'N01A':1,'N02AB':1,'N02BG':1,'L01':1,'L04':1,'H02':1,'J01':1,'J05':1};
+
+function _gmIsBlacklisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_BLACKLIST_MT).some(k=>atc.startsWith(k));}
+function _gmIsWhitelisted(atc){if(!atc)return false;atc=atc.toUpperCase();return Object.keys(ATC_WHITELIST_MT).some(k=>atc.startsWith(k));}
+function _gmExtractSterkte(naam){const m=(naam||'').toUpperCase().match(/(\d+(?:[,.]\d+)?)\s*(MCG|MG|G|ML|IE|MMOL|%)/);return m?m[1].replace(',','.')+m[2]:'';}
+
+function _gmParseDailyDose(kode){
+  if(!kode)return null;
+  kode=kode.trim().toUpperCase();
+  let fpd=null;
+  const mWr=kode.match(/^(\d+)-(\d+)W/);if(mWr){fpd=((+mWr[1])+(+mWr[2]))/2/7;}
+  const mDr=kode.match(/^(\d+)-(\d+)D/);if(mDr){fpd=((+mDr[1])+(+mDr[2]))/2;}
+  const mW=kode.match(/^(\d+(?:\.\d+)?)W/);if(mW&&fpd===null){fpd=+mW[1]/7;}
+  const mD=kode.match(/^(\d+(?:\.\d+)?)D/);if(mD&&fpd===null){fpd=+mD[1];}
+  if(fpd===null)return null;
+  let amt=1;
+  const mA=kode.match(/[DW](\d+(?:\.\d+)?)/);if(mA)amt=+mA[1];
+  if(kode.match(/[DW]0\.5/))amt=0.5;
+  return fpd*amt;
+}
+
+function _gmCalcAdherence(dates,aantallen,dkode,margin){
+  if(dates.length<2)return{pct:null,onTime:0,miss:0,late:0};
+  const daily=_gmParseDailyDose(dkode);
+  let onTime=0,miss=0,late=0;
+  dates.forEach((d,i)=>{
+    if(i===0||!daily)return;
+    const prev=new Date(dates[i-1]);
+    prev.setDate(prev.getDate()+Math.round(aantallen[i-1]/daily));
+    const diff=Math.round((new Date(d)-prev)/864e5);
+    if(Math.abs(diff)<=margin)onTime++;
+    else if(diff>margin)miss++;
+    else late++;
+  });
+  const tot=onTime+miss+late;
+  return{pct:tot>0?Math.round(onTime/tot*100):null,onTime,miss,late};
+}
+
+function _gmCalcContinuousMonths(dates){
+  if(dates.length<2)return 0;
+  let episodeStart=new Date(dates[0]);
+  for(let i=1;i<dates.length;i++){
+    if(Math.round((new Date(dates[i])-new Date(dates[i-1]))/864e5)>180)episodeStart=new Date(dates[i]);
+  }
+  return Math.round((new Date(dates[dates.length-1])-episodeStart)/(864e5*30));
+}
+
+function _gmCalcScore(count,months,fixed,adhPct,hasDose,c,isWL){
+  let s=0;
+  s+=Math.min(count/c.minP,2)*17.5;
+  s+=Math.min(months/c.minM,2)*17.5;
+  if(fixed)s+=8;
+  if(hasDose&&adhPct!==null){s+=Math.round(adhPct*.4);if(adhPct<60)s-=10;}
+  else if(!hasDose){s+=20;}
+  if(isWL)s+=9;
+  return Math.round(Math.min(Math.max(s,0),100));
+}
+
+function _gmCalcStatus(count,months,fixed,c,score){
+  if(count<c.minP)return'Uitgesloten';
+  if(months<c.minM)return'Uitgesloten';
+  if(c.reqF&&!fixed)return'Wisselende dosering';
+  return score>=55?'Aanbevolen':'Overwegen';
+}
+
+function _gmRedenAfwijzing(count,months,fixed,c,status){
+  if(status==='Aanbevolen')return null;
+  if(status==='Overwegen')return'Voldoet aan criteria maar score is laag';
+  if(status==='Wisselende dosering')return'Dosering wisselt — niet geschikt';
+  const r=[];
+  if(count<c.minP)r.push('Te weinig herhalingen ('+count+' van '+c.minP+' nodig)');
+  if(months<c.minM)r.push('Te kort onder behandeling ('+months+' van '+c.minM+' maanden)');
+  return r.join(' · ')||'Onvoldoende gegevens';
+}
+
+// ── Detecteer gemiste receptuur ──
+// Geeft array van {pid, patNaam, naw, meldingen:[{atc,naam,sterkte,uitg,datum,score,status,reden,voldoet,...}]}
+function detecteerGemisteReceptuur(){
+  if(!rawRows||!rawRows.length)return[];
+
+  const c=getCrit();  const exclusieSet=new Set([...exclusieMeds].map(s=>s.toLowerCase()));
+  const extraSet=new Set([...extraWhitelistMeds]);
+
+  function isWLorExtra(atc,naam){
+    if(_gmIsWhitelisted(atc)&&!_gmIsBlacklisted(atc))return true;
+    const nL=(naam||'').toLowerCase();
+    for(const k of extraSet){if(nL.includes(k))return true;}
+    return false;
+  }
+  function isUitgesloten(atc,naam){
+    const nL=(naam||'').toLowerCase(),atcU=(atc||'').toUpperCase();
+    for(const k of exclusieSet){if(nL.includes(k)||atcU.startsWith(k.toUpperCase()))return true;}
+    return false;
+  }
+
+  // Peildatum = meest recente datum in dataset
+  let peilTs=0;
+  rawRows.forEach(r=>{const t=new Date(r[C.datum]).getTime();if(t>peilTs)peilTs=t;});
+  const peilDatum=peilTs?new Date(peilTs):new Date();
+  const vensterMs=gemistTijdvenster*864e5;
+  const vensterStart=new Date(peilDatum.getTime()-vensterMs);
+
+  // Stap 1: verzamel gemiste H/R/TU-VU receptregels per pid|atc|sterkte
+  // Detectie puur op basis van de 3 datacriteria — geen sessiefilter
+  const gevonden={}; // key → {pid,atc,naam,sterkte,meldingen:[{datum,uitg,aantal,dkode}]}
+  rawRows.forEach(r=>{
+    const pid=(r[C.pid]||'').trim();
+    const dist=(r[C.dist]||'').trim().toUpperCase();
+    const herk=(r[C.herk]||'').trim().toUpperCase();
+    const uitg=(r[C.uitg]||'').trim().toUpperCase();
+    if(dist!=='H')return;
+    if(herk!=='R')return;  // R = Recept (nieuw recept van huisarts/specialist)
+    if(uitg!=='TU'&&uitg!=='VU')return;
+    const datum=(r[C.datum]||'').trim();
+    if(!datum)return;
+    const datumD=new Date(datum);
+    if(datumD<vensterStart||datumD>peilDatum)return;
+    const atc=(r[C.atc]||'').trim();
+    const naam=(r[C.naam]||'').trim();
+    if(!atc||atc==='0'||!naam)return;
+    if(_gmIsBlacklisted(atc)||isUitgesloten(atc,naam))return;
+    if(isNaamUitgesloten(naam)||isVormUitgesloten(atc,naam))return;
+    const sterkte=_gmExtractSterkte(naam);
+    const key=pid+'|'+atc+'|'+sterkte;
+    if(!gevonden[key])gevonden[key]={pid,atc,naam,sterkte,naw:null,meldingen:[]};
+    gevonden[key].meldingen.push({datum,uitg,aantal:parseInt(r[C.aantal]||'0')||0,dkode:(r[C.dkode]||'').trim()});
+  });
+
+  if(!Object.keys(gevonden).length)return[];
+
+  // Stap 2: voor elk gevonden middel — beoordeel kwaliteit via historische N-records
+  const histGrps={};
+  rawRows.forEach(r=>{
+    const pid=(r[C.pid]||'').trim();
+    const dist=(r[C.dist]||'').trim().toUpperCase();
+    if(dist!=='N')return;
+    const herk=(r[C.herk]||'').trim().toUpperCase();
+    if(herk==='D')return;
+    const atc=(r[C.atc]||'').trim();
+    const naam=(r[C.naam]||'').trim();
+    if(!atc||atc==='0'||!naam||!pid)return;
+    const sterkte=_gmExtractSterkte(naam);
+    const key=pid+'|'+atc+'|'+sterkte;
+    if(!gevonden[key])return; // alleen middelen die we al zagen
+    const datum=(r[C.datum]||'').trim();
+    const dkode=(r[C.dkode]||'').trim();
+    const aantal=parseInt(r[C.aantal]||'0')||0;
+    if(!histGrps[key])histGrps[key]={namen:new Set(),dkodes:[],entries:[]};
+    histGrps[key].namen.add(naam);
+    if(!histGrps[key].dkodes.includes(dkode))histGrps[key].dkodes.push(dkode);
+    if(datum)histGrps[key].entries.push({date:datum,aantal});
+  });
+
+  // Stap 2b: verzamel herk=R records voor tijdlijn (alle gewone recepten, ongeacht dist/uitg)
+  const histH={};
+  rawRows.forEach(r=>{
+    const pid=(r[C.pid]||'').trim();
+    const herk=(r[C.herk]||'').trim().toUpperCase();
+    if(herk!=='R')return;
+    const atc=(r[C.atc]||'').trim();
+    const naam=(r[C.naam]||'').trim();
+    if(!atc||atc==='0'||!naam||!pid)return;
+    const sterkte=_gmExtractSterkte(naam);
+    const key=pid+'|'+atc+'|'+sterkte;
+    if(!gevonden[key])return;
+    const datum=(r[C.datum]||'').trim();
+    const dkode=(r[C.dkode]||'').trim();
+    const uitg=(r[C.uitg]||'').trim().toUpperCase();
+    const aantal=parseInt(r[C.aantal]||'0')||0;
+    if(!datum)return;
+    if(!histH[key])histH[key]=[];
+    histH[key].push({date:datum,aantal,dkode,uitg});
+  });
+
+  // Stap 3: NAW per patiënt
+  const patNaw={};
+  rawRows.forEach(r=>{
+    const pid=(r[C.pid]||'').trim();
+    if(!pid)return;
+    if(!patNaw[pid]){
+      patNaw[pid]={
+        naam:(r[C.naamPat]||'').trim()||(r[C.naamPartner]||'').trim()||('Patiënt '+pid),
+        adres:(r[C.adres]||'').trim(),
+        postcode:(r[C.postcode]||'').trim(),
+        woonplaats:(r[C.woonplaats]||'').trim()
+      };
+    }
+  });
+
+  // Stap 4: bouw resultaat
+  const perPat={};
+  Object.entries(gevonden).forEach(function([key,gm]){
+    const hist=histGrps[key]||{namen:new Set(),dkodes:[],entries:[]};
+    hist.entries.sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
+    const dates=hist.entries.map(e=>e.date);
+    const aantallen=hist.entries.map(e=>e.aantal);
+    const mainDkode=hist.dkodes.filter(d=>d&&d.length>1&&!/^\d{4}-\d{2}/.test(d))[0]||'';
+    const fixedDose=new Set(hist.dkodes).size<=1;
+    const count=hist.entries.length;
+    const months=_gmCalcContinuousMonths(dates);
+    const adh=_gmCalcAdherence(dates,aantallen,mainDkode,c.margin);
+    const isWL=isWLorExtra(gm.atc,gm.naam);
+    const score=_gmCalcScore(count,months,fixedDose,adh.pct,!!mainDkode,c,isWL);
+    const status=_gmCalcStatus(count,months,fixedDose,c,score);
+    const reden=_gmRedenAfwijzing(count,months,fixedDose,c,status);
+    const voldoet=status==='Aanbevolen'||status==='Overwegen';
+    const a3=(gm.atc||'').slice(0,3).toUpperCase();
+    if(atcEnabled[a3]===false)return; // respecteer ATC-filters
+    const naamCap=gm.naam.charAt(0).toUpperCase()+gm.naam.slice(1).toLowerCase();
+
+    // Tijdlijn op basis van H-records (herhaalservice-verstrekkingen)
+    const hEntries=(histH[key]||[]).slice().sort((a,b)=>a.date>b.date?1:a.date<b.date?-1:0);
+    const hDates=hEntries.map(e=>e.date);
+    const hAantallen=hEntries.map(e=>e.aantal);
+    const hDkode=hEntries.find(e=>e.dkode&&e.dkode.length>1)?.dkode||mainDkode||'';
+    const hAdh=hEntries.length>=2?_gmCalcAdherence(hDates,hAantallen,hDkode,c.margin):{pct:null,onTime:0,miss:0,late:0};
+
+    if(!perPat[gm.pid])perPat[gm.pid]={
+      pid:gm.pid,
+      patNaam:patNaw[gm.pid]?.naam||('Patiënt '+gm.pid),
+      naw:patNaw[gm.pid]||{},
+      meldingen:[]
+    };
+    perPat[gm.pid].meldingen.push({
+      key,atc:gm.atc,naam:naamCap,sterkte:gm.sterkte,
+      meldingen:gm.meldingen, // de H-receptregels zelf (TU/VU met R-herkomst)
+      count,months,mainDkode,fixedDose,adh,score,status,reden,voldoet,isWL,
+      hEntries,hAdh,hDkode  // tijdlijndata op H-records
+    });
+  });
+
+  return Object.values(perPat).sort((a,b)=>a.patNaam.localeCompare(b.patNaam));
+}
+
+// ── Badge bijwerken ──
+function bijwerkGemistBadge(){
+  const resultaten=detecteerGemisteReceptuur();
+  const openMeldingen=resultaten.reduce((n,p)=>
+    n+p.meldingen.filter(m=>!gemistActies[m.key]).length,0);
+  const badge=document.getElementById('gemistCount');
+  if(badge){
+    badge.textContent=openMeldingen;
+    badge.style.background=openMeldingen>0?'#d97706':'var(--accent)';
+  }
+  if(activeTab==='gemist')renderGemistTab();
+}
+
+// ── Acties: markeer als toegevoegd of genegeerd ──
+// Backward-compat helper: geeft actie-string terug voor zowel oude (string) als nieuwe (object) opslag
+function _gemistActieStr(key){
+  const v=gemistActies[key];
+  if(!v)return null;
+  return typeof v==='string'?v:v.actie;
+}
+
+function gemistMarkeer(key,actie){
+  const vandaag=new Date().toISOString().slice(0,10);
+  const info=(window._gemistMeldingInfo||{})[key]||{};
+  gemistActies[key]={actie,datum:vandaag,naam:info.naam||'',pid:info.pid||key.split('|')[0]};
+  saveSession();
+  bijwerkGemistBadge();
+}
+function gemistHerstel(key){
+  delete gemistActies[key];
+  saveSession();
+  bijwerkGemistBadge();
+}
+
+function renderGemistLogboek(lijstEl){
+  const entries=Object.entries(gemistActies)
+    .filter(([,v])=>typeof v==='object'&&v.datum)
+    .map(([key,v])=>({key,...v}))
+    .sort((a,b)=>b.datum.localeCompare(a.datum)||b.naam.localeCompare(a.naam));
+
+  if(!entries.length){
+    lijstEl.innerHTML='<div class="empty"><div class="empty-ico">📋</div>'
+      +'<div class="empty-ttl">Logboek is leeg</div>'
+      +'<div class="empty-sub">Acties die je uitvoert bij gemiste receptuur worden hier per datum bijgehouden.</div></div>';
+    return;
+  }
+
+  // Groepeer op datum
+  const byDatum={};
+  entries.forEach(e=>{if(!byDatum[e.datum])byDatum[e.datum]=[];byDatum[e.datum].push(e);});
+
+  const fmtDatumLang=d=>{
+    const dt=new Date(d);
+    return isNaN(dt)?d:dt.toLocaleDateString('nl-NL',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  };
+
+  let html='<div style="padding:4px 0">';
+  Object.keys(byDatum).sort().reverse().forEach(datum=>{
+    const items=byDatum[datum];
+    const aantalToeg=items.filter(e=>e.actie==='toegevoegd').length;
+    const aantalNeg=items.filter(e=>e.actie==='genegeerd').length;
+    const subtitel=[aantalToeg&&aantalToeg+' toegevoegd',aantalNeg&&aantalNeg+' genegeerd'].filter(Boolean).join(' · ');
+    html+='<div style="margin-bottom:20px">'
+      +'<div style="display:flex;align-items:baseline;gap:10px;padding:7px 0;border-bottom:2px solid var(--border);margin-bottom:4px">'
+      +'<span style="font-size:13px;font-weight:600;color:var(--text)">'+fmtDatumLang(datum)+'</span>'
+      +'<span style="font-size:11px;color:var(--muted)">'+subtitel+'</span>'
+      +'</div>';
+    items.forEach(e=>{
+      const isToeg=e.actie==='toegevoegd';
+      const badge=isToeg
+        ?'<span style="font-size:11px;font-weight:600;color:var(--green);background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:4px;padding:2px 7px;flex-shrink:0">✓ Toegevoegd aan profiel</span>'
+        :'<span style="font-size:11px;font-weight:500;color:var(--muted);background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;flex-shrink:0">✕ Genegeerd</span>';
+      const safeKey=e.key.replace(/'/g,"\\'");
+      html+='<div style="display:flex;align-items:center;gap:12px;padding:9px 4px;border-bottom:1px solid var(--s2)">'
+        +'<span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;min-width:60px">nr. '+e.pid+'</span>'
+        +'<span style="flex:1;font-size:13px;font-weight:500;color:var(--text)">'+e.naam+'</span>'
+        +badge
+        +'<span class="gemist-undo-link" onclick="gemistHerstel(\''+safeKey+'\')">Terugzetten</span>'
+        +'</div>';
+    });
+    html+='</div>';
+  });
+  html+='</div>';
+  lijstEl.innerHTML=html;
+}
+
+// ── Render ──
+function renderGemistTab(){
+  const c=getCrit();
+  const toonAfgehandeld=document.getElementById('gemistToonAfgehandeld')?.checked||false;
+  const sel=document.getElementById('gemistTijdvensterSelect');
+  if(sel&&sel.value!==String(gemistTijdvenster))sel.value=String(gemistTijdvenster);
+
+  const alle=detecteerGemisteReceptuur();
+
+  // ── Statistieken ──
+  let totaalMeldingen=0,totaalPats=0,aantalTU=0,aantalVU=0,aantalAfgehandeld=0;
+  alle.forEach(p=>{
+    let patTelt=false;
+    p.meldingen.forEach(m=>{
+      totaalMeldingen++;
+      m.meldingen.forEach(r=>{if(r.uitg==='TU')aantalTU++;else aantalVU++;});
+      if(gemistActies[m.key])aantalAfgehandeld++;
+      else patTelt=true;
+    });
+    if(patTelt)totaalPats++;
+  });
+
+  const statEl=document.getElementById('gemistStatRow');
+  if(statEl){
+    statEl.innerHTML=[
+      {val:totaalMeldingen-aantalAfgehandeld,lbl:'Open meldingen',kleur:'var(--amber)'},
+      {val:totaalPats,lbl:'Patiënten',kleur:'var(--text)'},
+      {val:aantalTU,lbl:'TU-recepten',kleur:'rgba(99,102,241,1)'},
+      {val:aantalVU,lbl:'VU-recepten',kleur:'#b45309'}
+    ].map(s=>`<div class="gemist-stat">
+      <div class="gemist-stat-val" style="color:${s.kleur}">${s.val}</div>
+      <div class="gemist-stat-lbl">${s.lbl}</div>
+    </div>`).join('');
+  }
+
+  // Vul lookup-map zodat gemistMarkeer naam+pid kan opslaan
+  window._gemistMeldingInfo={};
+  alle.forEach(p=>p.meldingen.forEach(m=>{
+    window._gemistMeldingInfo[m.key]={naam:m.naam,pid:p.pid};
+  }));
+
+  // Logboek-knop bijwerken
+  const logboekBtn=document.getElementById('btnGemistLogboek');
+  const logboekAantal=Object.values(gemistActies).filter(v=>typeof v==='object'&&v.datum).length;
+  if(logboekBtn){
+    logboekBtn.textContent='📋 Logboek'+(logboekAantal>0?' ('+logboekAantal+')':'');
+    logboekBtn.style.background=gemistLogboekOpen?'var(--accent)':'';
+    logboekBtn.style.color=gemistLogboekOpen?'white':'';
+    logboekBtn.style.borderColor=gemistLogboekOpen?'var(--accent)':'';
+  }
+
+  const lijstEl=document.getElementById('gemistLijst');
+  if(!lijstEl)return;
+
+  // Logboek-modus
+  if(gemistLogboekOpen){renderGemistLogboek(lijstEl);return;}
+
+  if(!rawRows||!rawRows.length){
+    lijstEl.innerHTML='<div class="empty"><div class="empty-ico">📂</div><div class="empty-ttl">Nog geen bestand geladen</div><div class="empty-sub">Laad eerst een Gemini-exportbestand om gemiste receptuur te kunnen detecteren.</div></div>';
+    return;
+  }
+  if(!alle.length){
+    // ── Diagnostische breakdown ──
+    let nH=0, nHN=0, nHNTUVU=0;
+    const uitgValues=new Set(), herkValues=new Set(), distValues=new Set();
+    rawRows.forEach(r=>{
+      const dist=(r[C.dist]||'').trim().toUpperCase();
+      const herk=(r[C.herk]||'').trim().toUpperCase();
+      const uitg=(r[C.uitg]||'').trim().toUpperCase();
+      distValues.add(dist); herkValues.add(herk); uitgValues.add(uitg);
+      if(dist!=='H')return; nH++;
+      if(herk!=='R')return; nHN++;
+      if(uitg!=='TU'&&uitg!=='VU')return; nHNTUVU++;
+    });
+    const stap=(ok,n,lbl)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:6px;background:${ok?'rgba(5,150,105,.07)':'rgba(245,158,11,.07)'};border-left:3px solid ${ok?'var(--green)':'var(--amber)'}">
+      <span style="font-size:16px">${ok?'✅':'⚠️'}</span>
+      <div><div style="font-size:13px;font-weight:500;color:var(--text)">${lbl}</div><div style="font-size:11px;color:var(--muted)">${n} gevonden</div></div></div>`;
+    lijstEl.innerHTML=`<div style="max-width:600px;margin:24px auto;padding:0 16px">
+      <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:4px">🔍 Diagnose — waarom geen resultaten?</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px">Stapsgewijze controle op de geladen data (${rawRows.length.toLocaleString('nl-NL')} regels, tijdvenster: ${gemistTijdvenster===9999?'alle data':gemistTijdvenster+' dagen'}):</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${stap(nH>0,nH,'Stap 1 — Regels met dist=H (herhaalservice-verstrekkingen)')}
+        ${stap(nHN>0,nHN,'Stap 2 — Daarvan: herkomst=R (nieuw recept van huisarts/specialist)')}
+        ${stap(nHNTUVU>0,nHNTUVU,'Stap 3 — Daarvan: uitgifte=TU of VU — dit zijn de gemiste recepten')}
+      </div>
+      <div style="margin-top:16px;padding:10px 14px;background:var(--s2);border-radius:8px;font-size:11px;color:var(--muted)">
+        <strong>Unieke waarden in data —</strong>
+        dist: ${[...distValues].slice(0,8).join(', ')} &nbsp;|&nbsp;
+        herk: ${[...herkValues].slice(0,8).join(', ')} &nbsp;|&nbsp;
+        uitg: ${[...uitgValues].slice(0,8).join(', ')}
+      </div>
+    </div>`;
+    return;
+  }
+
+  const gefilterd=alle.filter(p=>{
+    if(toonAfgehandeld)return true;
+    return p.meldingen.some(m=>!gemistActies[m.key]);
+  });
+
+  if(!gefilterd.length){
+    lijstEl.innerHTML='<div class="empty"><div class="empty-ico">✅</div><div class="empty-ttl">Alle meldingen afgehandeld</div><div class="empty-sub">Zet "Toon afgehandeld" aan om de geschiedenis te bekijken.</div></div>';
+    return;
+  }
+
+  function fmtD(s){if(!s)return'—';const d=new Date(s);return d.toLocaleDateString('nl-NL',{day:'2-digit',month:'2-digit',year:'numeric'});}
+  function scoreKleur(s){return s>=70?'var(--green)':s>=55?'var(--amber)':'var(--red)';}
+  function statusLabel(s){
+    if(s==='Aanbevolen')return'<span class="badge bg">✅ Aanbevolen</span>';
+    if(s==='Overwegen')return'<span class="badge ba">⚠️ Overwegen</span>';
+    return'<span class="badge br">❌ '+s+'</span>';
+  }
+
+  lijstEl.innerHTML='';
+  gefilterd.forEach(function(p){
+    const card=document.createElement('div');
+    card.className='gemist-card';
+
+    // Header
+    const hdr=document.createElement('div');
+    hdr.className='gemist-card-hdr';
+    hdr.innerHTML='<div style="flex:1">'
+      +'<div style="font-size:13px;font-weight:600;color:var(--accent-dark)">nr. '+p.pid+'</div>'
+      +'</div>'
+      +'<span style="font-size:11px;color:var(--muted)">'+p.meldingen.length+' melding'+(p.meldingen.length!==1?'en':'')+'</span>';
+    card.appendChild(hdr);
+
+    // Tabel
+    const tblWrap=document.createElement('div');
+
+    // Tabelheader
+    const th=document.createElement('div');
+    th.className='gemist-med-hdr';
+    th.innerHTML='<div>Geneesmiddel <span style="font-size:10px;font-weight:400;color:var(--muted);text-transform:none;margin-left:8px">'
+      +'<span class="dot dot-eu" style="display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle"></span> EU &nbsp;'
+      +'<span class="dot dot-ok" style="display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle"></span> Op tijd &nbsp;'
+      +'<span class="dot dot-miss" style="display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle"></span> Te laat &nbsp;'
+      +'<span class="dot dot-late" style="display:inline-block;width:8px;height:8px;border-radius:50%;vertical-align:middle"></span> Te vroeg'
+      +'</span></div><div>Uitgifte(s) &amp; gebruik</div><div style="min-width:200px">Actie</div>';
+    tblWrap.appendChild(th);
+
+    p.meldingen.forEach(function(m){
+      const isAfgehandeld=!!gemistActies[m.key];
+      if(isAfgehandeld&&!toonAfgehandeld)return;
+
+      const actie=_gemistActieStr(m.key);
+      const row=document.createElement('div');
+      row.className='gemist-med-row'+(isAfgehandeld?' gemist-afgehandeld':'');
+
+      // Kolom 1: Geneesmiddel + inline tijdlijn
+      const tlDots=m.hEntries.length>=2?(()=>{
+        const adhH=_gmCalcAdherence(
+          m.hEntries.map(e=>e.date),
+          m.hEntries.map(e=>e.aantal),
+          m.hDkode,c.margin
+        );
+        const dots=adhH.events?adhH.events.map((e,i)=>{
+          // Gebruik uitg-type als override voor EU/TU/VU zichtbaarheid
+          const uitgType=(m.hEntries[i]||{}).uitg||'';
+          const cls=uitgType==='EU'?'dot-eu':e.type==='eu'?'dot-eu':e.type==='ok'?'dot-ok':e.type==='miss'?'dot-miss':'dot-late';
+          const uitgLabel=uitgType?uitgType+' ':'';
+          const tip=uitgLabel+e.datum+(e.diff!==undefined?(e.diff>0?' (+'+e.diff+'d)':' ('+e.diff+'d)'):'');
+          return'<div class="dot '+cls+'" title="'+tip+'" style="width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:2px"></div>';
+        }).join(''):'';
+        const adhPct=adhH.pct!==null?adhH.pct:null;
+        const adhKleur=adhPct===null?'var(--muted)':adhPct>=80?'var(--green)':adhPct>=60?'var(--amber)':'var(--red)';
+        return dots
+          ?'<div style="margin-top:6px;display:flex;align-items:center;gap:6px;flex-wrap:wrap">'
+            +'<div style="display:flex;gap:2px;align-items:center">'+dots+'</div>'
+            +(adhPct!==null?'<span style="font-size:11px;font-weight:600;color:'+adhKleur+'">'+adhPct+'%</span>':'')
+            +'<span style="font-size:10px;color:var(--muted)">regelmaat ('+m.hEntries.length+' recepten via herk=R)</span>'
+            +'</div>'
+          :'';
+      })():'';
+      const kol1='<div>'
+        +'<div style="font-size:13px;font-weight:500;color:var(--text)">'+m.naam+'</div>'
+        +'<div style="font-size:11px;color:var(--muted)">'+m.atc+(m.sterkte?' &middot; '+m.sterkte:'')+'</div>'
+        +(m.hDkode?'<div style="font-size:11px;color:var(--dim)">'+m.hDkode+'</div>':'')
+        +tlDots
+        +'</div>';
+
+      // Kolom 2: Uitgifte-datums + gebruik + aantal
+      const uitgHtml=m.meldingen.slice().sort((a,b)=>b.datum>a.datum?1:b.datum<a.datum?-1:0).map(function(r){
+        const pill=r.uitg==='TU'?'gemist-pill-tu':'gemist-pill-vu';
+        const gebruikStr=r.dkode?'<span style="font-size:11px;color:var(--muted);margin-left:6px">'+r.dkode+'</span>':'';
+        const aantalStr=r.aantal?'<span style="font-size:11px;color:var(--dim);margin-left:4px">· '+r.aantal+' st</span>':'';
+        return'<div style="display:flex;align-items:center;gap:4px;margin-bottom:4px;flex-wrap:wrap">'
+          +'<span class="'+pill+'">'+r.uitg+'</span>'
+          +'<span style="font-size:12px;color:var(--dim)">'+fmtD(r.datum)+'</span>'
+          +gebruikStr+aantalStr
+          +'</div>';
+      }).join('');
+      const kol2='<div>'+uitgHtml+'</div>';
+
+      // Kolom 3: Kwaliteitstoets
+      const kol3='<div>'
+        +statusLabel(m.status)
+        +(m.reden?'<div style="font-size:11px;color:var(--muted);margin-top:4px">'+m.reden+'</div>':'')
+        +(!m.voldoet?'<div style="font-size:11px;color:var(--amber);margin-top:4px;padding:4px 8px;background:rgba(245,158,11,.1);border-radius:4px">⚠ Voldoet nog niet aan criteria</div>':'')
+        +(m.months>0?'<div style="font-size:11px;color:var(--muted);margin-top:3px">Behandelduur: '+m.months+' mnd &middot; '+m.count+' verstrekking'+(m.count!==1?'en':'')+'</div>':'')
+        +(m.adh.pct!==null?'<div style="font-size:11px;color:var(--muted)">Therapietrouw: '+m.adh.pct+'%</div>':'')
+        +'</div>';
+
+      // Kolom 4: Score
+      const kol4='<div style="text-align:center">'
+        +'<div style="font-size:20px;font-weight:700;color:'+scoreKleur(m.score)+'">'+m.score+'</div>'
+        +'<div style="font-size:10px;color:var(--muted)">/ 100</div>'
+        +'</div>';
+
+      // Kolom 5: Acties
+      let kol5='<div style="min-width:200px">';
+      if(!isAfgehandeld){
+        kol5+='<div style="display:flex;flex-direction:column;gap:6px">'
+          +'<button class="btn btn-sm" style="background:var(--green);color:white;border-color:var(--green);font-size:11px" onclick="gemistMarkeer(\''+m.key+'\',\'toegevoegd\')">✓ Toegevoegd aan profiel</button>'
+          +'<button class="btn btn-ghost btn-sm" style="font-size:11px;color:var(--muted)" onclick="gemistMarkeer(\''+m.key+'\',\'genegeerd\')">✕ Negeren</button>'
+          +'</div>';
+      } else {
+        const actieLabel=actie==='toegevoegd'?'✓ Toegevoegd aan profiel':'✕ Genegeerd';
+        const actieKleur=actie==='toegevoegd'?'var(--green)':'var(--muted)';
+        kol5+='<div style="font-size:12px;font-weight:500;color:'+actieKleur+'">'+actieLabel+'</div>'
+          +'<span class="gemist-undo-link" onclick="gemistHerstel(\''+m.key+'\')">Terugzetten</span>';
+        // Mailknop bij "toegevoegd aan profiel"
+        if(actie==='toegevoegd'){
+          const gemistEmail=getPatientEmail(p.pid);
+          if(gemistEmail){
+            const mailLink=maakGemistMailLink(p.pid,m.naam);
+            if(mailLink){
+              kol5+='<a href="'+mailLink+'" class="btn btn-ghost btn-xs" style="margin-top:6px;display:inline-flex;text-decoration:none" title="Stuur bevestigingsmail naar '+gemistEmail+'">📧 Bevestiging mailen</a>';
+            }
+          } else {
+            kol5+='<div style="font-size:10px;color:var(--muted);margin-top:6px;opacity:.5" title="Geen e-mailadres bekend (kolom sdEmail)">📧 Geen e-mail bekend</div>';
+          }
+        }
+      }
+      kol5+='</div>';
+
+      row.innerHTML=kol1+kol2+kol5;
+      tblWrap.appendChild(row);
+    });
+
+    card.appendChild(tblWrap);
+    lijstEl.appendChild(card);
+  });
+}
 
 // ═══════════════════════════════════════════
 // BRIEVEN GENEREREN
@@ -3776,6 +4599,11 @@ let briefSjabloonNaam='';
 let briefActieveDag=null;        // 'YYYY-MM-DD' — geselecteerde dag
 let briefMedSelectie={};         // {pid: Set<medicijnnaam>} — bevestigde selectie (brief + sync-plan)
 let briefMedPending={};          // {pid: Set<medicijnnaam>} — tijdelijk tijdens bewerken, nog niet bevestigd
+
+// ── Gemiste receptuur state ──
+let gemistActies={};             // {'pid|atc|sterkte': {actie,datum,naam,pid}} — acties per melding
+let gemistTijdvenster=90;        // actief tijdvenster in dagen
+let gemistLogboekOpen=false;     // toggle: toon logboek ipv meldingen
 
 // Herstel sjabloon uit localStorage na page refresh
 function herstelBriefSjabloon(){
@@ -3935,7 +4763,30 @@ function renderBrievenTab(){
     const btnUit=document.createElement('button');
     btnUit.className='btn btn-ghost btn-xs';btnUit.textContent='Alles ✗';
     btnUit.addEventListener('click',function(){briefSelecteerAlles(p.pid,false);});
-    hdr.appendChild(info);hdr.appendChild(pid);hdr.appendChild(btnAan);hdr.appendChild(btnUit);
+
+    // Mail-knop — alleen tonen als e-mailadres bekend is
+    const datumNLCard=new Date().toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'});
+    const emailAdres=(naw.email)||getPatientEmail(p.pid);
+    const btnMail=document.createElement('a');
+    btnMail.className='btn btn-ghost btn-xs';
+    if(emailAdres){
+      btnMail.textContent='📧 Mail';
+      btnMail.title='Stuur brief per e-mail naar '+emailAdres;
+      btnMail.style.cursor='pointer';
+      // href wordt aangemaakt op klik zodat de actuele medicatieselectie wordt gebruikt
+      btnMail.addEventListener('click',function(e){
+        e.preventDefault();
+        var link=maakBriefMailLink(p,datumNLCard);
+        if(link)window.location.href=link;
+      });
+    } else {
+      btnMail.textContent='📧 Geen e-mail';
+      btnMail.title='Geen e-mailadres bekend voor deze patiënt (kolom sdEmail)';
+      btnMail.style.opacity='.4';btnMail.style.cursor='not-allowed';
+      btnMail.style.pointerEvents='none';
+    }
+
+    hdr.appendChild(info);hdr.appendChild(pid);hdr.appendChild(btnAan);hdr.appendChild(btnUit);hdr.appendChild(btnMail);
 
     // Medicijnen
     const meds=document.createElement('div');
@@ -4054,6 +4905,122 @@ function markeerBrievenVerstuurd(){
 }
 
 // ─── Word-document generatie ───────────────────────────────────
+// ─── Geneesmiddelnaam netjes opmaken voor brief en mail ───────────────────
+// Zet afkortingen van toedieningsvormen om naar volledige woorden en
+// geeft eenheden een spatie (40MG → 40 mg). Alleen toegepast in brief/mail.
+function formateerNaam(naam){
+  if(!naam)return naam;
+  let s=naam.trim();
+  // Eenheden: spatie toevoegen tussen getal en eenheid (40MG → 40 mg)
+  s=s.replace(/(\d+(?:[.,]\d+)?)\s*(MCG\/ML|MG\/ML|MG\/G|MCG|MG|G\/ML|ML|IE|G(?=\b)|%)/gi,
+    (_,num,unit)=>num+' '+unit.toLowerCase());
+  // Naar lowercase voor uniforme verwerking
+  s=s.toLowerCase();
+  // Toedieningsvormen uitschrijven (hele-woord-match)
+  const vormen=[
+    [/\btabs\b/g,'tabletten'],[/\btab\b/g,'tablet'],
+    [/\bcaps\b/g,'capsules'],[/\bcap\b/g,'capsule'],
+    [/\boogdr\b/g,'oogdruppels'],[/\bdr\b/g,'druppels'],[/\bdrup\b/g,'druppels'],
+    [/\bopl\b/g,'oplossing'],[/\binj\b/g,'injectie'],
+    [/\bsusp\b/g,'suspensie'],[/\bzak\b/g,'sachet'],[/\bpoed\b/g,'poeder'],
+    [/\baer\b/g,'aerosol'],[/\binh\b/g,'inhalator'],
+    [/\bpleist\b/g,'pleister'],[/\bsir\b/g,'siroop'],
+    [/\bret\b/g,'retard'],[/\bdep\b/g,'depot'],
+  ];
+  vormen.forEach(([re,verv])=>{s=s.replace(re,verv);});
+  // Eerste letter uppercase
+  return s.charAt(0).toUpperCase()+s.slice(1);
+}
+
+// ─── E-mailadres en aanschrijfnaam opzoeken vanuit ruwe data ──────────────
+function getPatientEmail(pid){
+  const rij=rawRows.find(r=>(r[C.pid]||'').trim()===pid&&(r[C.email]||'').trim());
+  return rij?(rij[C.email]||'').trim():'';
+}
+function getPatientAanschrijfnaam(pid){
+  const nawRij=rawRows.find(r=>(r[C.pid]||'').trim()===pid&&(r[C.aanschrijfnaam]||'').trim());
+  return nawRij?(nawRij[C.aanschrijfnaam]||'').trim():'';
+}
+
+// ─── Platte tekst uit Word-sjabloon extraheren (voor mail) ───────────────
+// Trekt de tekst uit de word/document.xml en vervangt de placeholders,
+// zodat de mailbody dezelfde inhoud heeft als de Word-brief.
+function briefAlsTekst(tplXml,naam,adres,postcode,woonplaats,datumNL,medRegels,aanschrijfnaam){
+  var s=tplXml;
+  // Paragraafeinden omzetten naar newlines, dan alle XML-tags strippen
+  s=s.replace(/<\/w:p>/g,'\n').replace(/<w:br[^>]*\/>/g,'\n').replace(/<[^>]+>/g,'');
+  // HTML-entiteiten decoderen
+  s=s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#x27;/g,"'");
+  // Meerdere lege regels samenvoegen
+  s=s.replace(/\n{3,}/g,'\n\n').trim();
+  // Placeholders vervangen
+  var aanhef=aanschrijfnaam&&aanschrijfnaam.trim()?aanschrijfnaam.trim():'heer/mevrouw '+naam;
+  s=s.replace('Geachte [Naam pati\u00ebnt]','Geachte '+aanhef);
+  s=s.replace(/\[Naam pati\u00ebnt\]/g,naam);
+  s=s.replace(/\[Adres\]/g,adres||'');
+  s=s.replace(/\[Postcode\] \[Woonplaats\]/g,(postcode+' '+woonplaats).trim());
+  s=s.replace(/\[Postcode\]/g,postcode||'');
+  s=s.replace(/\[Woonplaats\]/g,woonplaats||'');
+  s=s.replace(/\[Datum\]/g,datumNL);
+  s=s.replace(/\[Medicijnen\]/g,medRegels.join('\n'));
+  return s.trim();
+}
+
+// ─── Mailto-link genereren voor de herhaalservice-brief ──────────────────
+function maakBriefMailLink(p,datumNL){
+  const naw=p.naw||{};
+  const email=naw.email||getPatientEmail(p.pid);
+  if(!email)return null;
+  const naam=naw.naam||('Pati\u00ebnt '+p.pid);
+  const aanschrijfnaam=naw.aanschrijfnaam||'';
+  const geselecteerd=briefMedSelectie[p.pid]||new Set();
+  const medRegels=[...geselecteerd].map(n=>'\u2022 '+formateerNaam(n));
+
+  var onderwerp=encodeURIComponent('Herhaalservice '+(geselecteerdeApotheek?geselecteerdeApotheek.naam:''));
+  var body;
+  if(briefSjabloon){
+    try{
+      var zip=new PizZip(briefSjabloon);
+      var docXml=zip.file('word/document.xml').asText();
+      var bodyM=docXml.match(/<w:body>([\s\S]*?)<\/w:body>/);
+      var tpl=bodyM?bodyM[1].replace(/<w:sectPr[\s\S]*?<\/w:sectPr>/,''):docXml;
+      body=briefAlsTekst(tpl,naam,naw.adres||'',naw.postcode||'',naw.woonplaats||'',datumNL,medRegels,aanschrijfnaam);
+    }catch(e){body=_fallbackBriefTekst(naam,aanschrijfnaam,medRegels,datumNL);}
+  } else {
+    body=_fallbackBriefTekst(naam,aanschrijfnaam,medRegels,datumNL);
+  }
+  return 'mailto:'+encodeURIComponent(email)+'?subject='+onderwerp+'&body='+encodeURIComponent(body);
+}
+
+function _fallbackBriefTekst(naam,aanschrijfnaam,medRegels,datumNL){
+  const aanhef=aanschrijfnaam&&aanschrijfnaam.trim()?aanschrijfnaam.trim():'heer/mevrouw '+naam;
+  const apo=geselecteerdeApotheek?geselecteerdeApotheek.naam:'de apotheek';
+  return 'Geachte '+aanhef+',\n\n'
+    +'Hierbij bevestigen wij dat u bent opgenomen in de herhaalservice van '+apo+'.\n\n'
+    +'De volgende medicijnen worden voortaan via de herhaalservice verstrekt:\n'
+    +medRegels.join('\n')+'\n\n'
+    +'Datum: '+datumNL+'\n\n'
+    +'Met vriendelijke groet,\n'+apo;
+}
+
+// ─── Mailto-link genereren voor gemiste receptuur bevestiging ────────────
+function maakGemistMailLink(pid,medNaam){
+  const email=getPatientEmail(pid);
+  if(!email)return null;
+  const aanschrijfnaam=getPatientAanschrijfnaam(pid);
+  const aanhef=aanschrijfnaam?aanschrijfnaam:'heer/mevrouw';
+  const apo=geselecteerdeApotheek?geselecteerdeApotheek.naam:'de apotheek';
+  const medNetjes=formateerNaam(medNaam)||medNaam;
+  const onderwerp=encodeURIComponent('Opname herhaalservice \u2014 '+medNetjes);
+  const body=encodeURIComponent(
+    'Geachte '+aanhef+',\n\n'
+    +'Hierbij bevestigen wij dat uw medicijn '+medNetjes+' voortaan via de herhaalservice van '+apo+' wordt verstrekt.\n\n'
+    +'U hoeft hier geen actie voor te ondernemen. Heeft u vragen, neem dan gerust contact op met de apotheek.\n\n'
+    +'Met vriendelijke groet,\n'+apo
+  );
+  return 'mailto:'+encodeURIComponent(email)+'?subject='+onderwerp+'&body='+body;
+}
+
 function escXml(s){
   return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
@@ -4216,7 +5183,7 @@ async function downloadBrieven(){
       var naam=naw.naam||('Pati\u00ebnt '+p.pid);
       var geselecteerd=briefMedSelectie[p.pid]||new Set();
       var medRegels=[...geselecteerd].map(function(n){
-        return '- '+(n.charAt(0).toUpperCase()+n.slice(1).toLowerCase());
+        return '\u2022 '+formateerNaam(n);
       });
 
       // Gebruik de nieuwe non-destructieve invulfunctie
