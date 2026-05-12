@@ -4333,10 +4333,26 @@ function renderGemistLogboek(lijstEl){
         ?'<span style="font-size:11px;font-weight:600;color:var(--green);background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:4px;padding:2px 7px;flex-shrink:0">✓ Toegevoegd aan profiel</span>'
         :'<span style="font-size:11px;font-weight:500;color:var(--muted);background:var(--s2);border:1px solid var(--border);border-radius:4px;padding:2px 7px;flex-shrink:0">✕ Genegeerd</span>';
       const safeKey=e.key.replace(/'/g,"\\'");
+
+      // Mailknop voor 'toegevoegd'-entries
+      let mailHtml='';
+      if(isToeg){
+        const logEmail=getPatientEmail(e.pid);
+        if(logEmail){
+          const logMailLink=maakGemistMailLink(e.pid,e.naam);
+          if(logMailLink){
+            mailHtml='<a href="'+logMailLink+'" style="font-size:12px;font-weight:600;color:#fff;background:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:4px 12px;text-decoration:none;flex-shrink:0;display:inline-flex;align-items:center;gap:4px" title="Stuur bevestigingsmail naar '+logEmail+'">📧 Mailen</a>';
+          }
+        } else {
+          mailHtml='<span style="font-size:12px;font-weight:500;color:#92400e;flex-shrink:0;padding:4px 10px;border:1px solid #f59e0b;border-radius:6px;background:#fef3c7" title="Geen e-mailadres bekend (kolom sdEmail)">📧 Geen e-mail</span>';
+        }
+      }
+
       html+='<div style="display:flex;align-items:center;gap:12px;padding:9px 4px;border-bottom:1px solid var(--s2)">'
         +'<span style="font-family:var(--mono);font-size:11px;color:var(--muted);flex-shrink:0;min-width:60px">nr. '+e.pid+'</span>'
         +'<span style="flex:1;font-size:13px;font-weight:500;color:var(--text)">'+e.naam+'</span>'
         +badge
+        +mailHtml
         +'<span class="gemist-undo-link" onclick="gemistHerstel(\''+safeKey+'\')">Terugzetten</span>'
         +'</div>';
     });
@@ -4573,10 +4589,10 @@ function renderGemistTab(){
           if(gemistEmail){
             const mailLink=maakGemistMailLink(p.pid,m.naam);
             if(mailLink){
-              kol5+='<a href="'+mailLink+'" class="btn btn-ghost btn-xs" style="margin-top:6px;display:inline-flex;text-decoration:none" title="Stuur bevestigingsmail naar '+gemistEmail+'">📧 Bevestiging mailen</a>';
+              kol5+='<a href="'+mailLink+'" style="margin-top:8px;font-size:12px;font-weight:600;color:#fff;background:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:5px 12px;text-decoration:none;display:inline-flex;align-items:center;gap:4px" title="Stuur bevestigingsmail naar '+gemistEmail+'">📧 Bevestiging mailen</a>';
             }
           } else {
-            kol5+='<div style="font-size:10px;color:var(--muted);margin-top:6px;opacity:.5" title="Geen e-mailadres bekend (kolom sdEmail)">📧 Geen e-mail bekend</div>';
+            kol5+='<div style="font-size:12px;font-weight:500;color:#92400e;margin-top:8px;padding:4px 10px;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;display:inline-block" title="Geen e-mailadres bekend (kolom sdEmail ontbreekt)">📧 Geen e-mailadres bekend</div>';
           }
         }
       }
@@ -4768,12 +4784,10 @@ function renderBrievenTab(){
     const datumNLCard=new Date().toLocaleDateString('nl-NL',{day:'2-digit',month:'long',year:'numeric'});
     const emailAdres=(naw.email)||getPatientEmail(p.pid);
     const btnMail=document.createElement('a');
-    btnMail.className='btn btn-ghost btn-xs';
     if(emailAdres){
-      btnMail.textContent='📧 Mail';
+      btnMail.textContent='📧 Mail versturen';
       btnMail.title='Stuur brief per e-mail naar '+emailAdres;
-      btnMail.style.cursor='pointer';
-      // href wordt aangemaakt op klik zodat de actuele medicatieselectie wordt gebruikt
+      btnMail.style.cssText='font-size:12px;font-weight:600;color:#fff;background:var(--accent);border:1px solid var(--accent);border-radius:6px;padding:5px 12px;text-decoration:none;cursor:pointer;display:inline-flex;align-items:center;gap:4px;flex-shrink:0';
       btnMail.addEventListener('click',function(e){
         e.preventDefault();
         var link=maakBriefMailLink(p,datumNLCard);
@@ -4782,8 +4796,7 @@ function renderBrievenTab(){
     } else {
       btnMail.textContent='📧 Geen e-mail';
       btnMail.title='Geen e-mailadres bekend voor deze patiënt (kolom sdEmail)';
-      btnMail.style.opacity='.4';btnMail.style.cursor='not-allowed';
-      btnMail.style.pointerEvents='none';
+      btnMail.style.cssText='font-size:12px;font-weight:500;color:#92400e;background:#fef3c7;border:1px solid #f59e0b;border-radius:6px;padding:5px 10px;cursor:not-allowed;opacity:.7;flex-shrink:0';
     }
 
     hdr.appendChild(info);hdr.appendChild(pid);hdr.appendChild(btnAan);hdr.appendChild(btnUit);hdr.appendChild(btnMail);
@@ -4946,13 +4959,31 @@ function getPatientAanschrijfnaam(pid){
 // Trekt de tekst uit de word/document.xml en vervangt de placeholders,
 // zodat de mailbody dezelfde inhoud heeft als de Word-brief.
 function briefAlsTekst(tplXml,naam,adres,postcode,woonplaats,datumNL,medRegels,aanschrijfnaam){
-  var s=tplXml;
-  // Paragraafeinden omzetten naar newlines, dan alle XML-tags strippen
-  s=s.replace(/<\/w:p>/g,'\n').replace(/<w:br[^>]*\/>/g,'\n').replace(/<[^>]+>/g,'');
-  // HTML-entiteiten decoderen
-  s=s.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#x27;/g,"'");
-  // Meerdere lege regels samenvoegen
-  s=s.replace(/\n{3,}/g,'\n\n').trim();
+  // Betere extractie: verwerk paragraaf voor paragraaf zodat witruimte correct blijft.
+  // Elke <w:p> levert één regel op; twee opeenvolgende lege <w:p>'s → één lege regel.
+  var paras=[];
+  var paraRe=/<w:p[ >][\s\S]*?<\/w:p>/g;
+  var pm;
+  while((pm=paraRe.exec(tplXml))!==null){
+    var txt='';
+    var tRe=/<w:t[^>]*>([\s\S]*?)<\/w:t>/g;
+    var tm;
+    while((tm=tRe.exec(pm[0]))!==null)txt+=tm[1];
+    // XML-entiteiten decoderen
+    txt=txt.replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#x27;/g,"'");
+    paras.push(txt);
+  }
+  // Samenvoegen: lege paragrafen worden lege regels, maar niet meer dan één achter elkaar
+  var regels=[];
+  var vorigeLeeg=false;
+  paras.forEach(function(p){
+    var leeg=p.trim()==='';
+    if(leeg&&vorigeLeeg)return; // sla dubbele lege regels over
+    regels.push(p);
+    vorigeLeeg=leeg;
+  });
+  var s=regels.join('\n').trim();
+
   // Placeholders vervangen
   var aanhef=aanschrijfnaam&&aanschrijfnaam.trim()?aanschrijfnaam.trim():'heer/mevrouw '+naam;
   s=s.replace('Geachte [Naam pati\u00ebnt]','Geachte '+aanhef);
@@ -4963,10 +4994,14 @@ function briefAlsTekst(tplXml,naam,adres,postcode,woonplaats,datumNL,medRegels,a
   s=s.replace(/\[Woonplaats\]/g,woonplaats||'');
   s=s.replace(/\[Datum\]/g,datumNL);
   s=s.replace(/\[Medicijnen\]/g,medRegels.join('\n'));
+
+  // Verwijder eventuele resterende triple-newlines
+  s=s.replace(/\n{3,}/g,'\n\n');
   return s.trim();
 }
 
 // ─── Mailto-link genereren voor de herhaalservice-brief ──────────────────
+// Probeert ook de Word-footer te lezen (apotheekgegevens staan soms daar).
 function maakBriefMailLink(p,datumNL){
   const naw=p.naw||{};
   const email=naw.email||getPatientEmail(p.pid);
@@ -4976,15 +5011,24 @@ function maakBriefMailLink(p,datumNL){
   const geselecteerd=briefMedSelectie[p.pid]||new Set();
   const medRegels=[...geselecteerd].map(n=>'\u2022 '+formateerNaam(n));
 
-  var onderwerp=encodeURIComponent('Herhaalservice '+(geselecteerdeApotheek?geselecteerdeApotheek.naam:''));
+  var onderwerp=encodeURIComponent('NIEUW! Medicatie automatisch herhalen');
+  const apo=geselecteerdeApotheek?geselecteerdeApotheek.naam:'de apotheek';
   var body;
-  if(briefSjabloon){
+  if(briefSjabloon&&typeof PizZip!=='undefined'){
     try{
       var zip=new PizZip(briefSjabloon);
       var docXml=zip.file('word/document.xml').asText();
       var bodyM=docXml.match(/<w:body>([\s\S]*?)<\/w:body>/);
       var tpl=bodyM?bodyM[1].replace(/<w:sectPr[\s\S]*?<\/w:sectPr>/,''):docXml;
       body=briefAlsTekst(tpl,naam,naw.adres||'',naw.postcode||'',naw.woonplaats||'',datumNL,medRegels,aanschrijfnaam);
+      // Stap 1: NAW-blok bovenaan verwijderen — mail begint bij 'NIEUW' of 'Geachte'
+      var startIdx=body.search(/NIEUW|Geachte/i);
+      if(startIdx>0)body=body.slice(startIdx);
+      // Stap 2: alles vanaf 'Met vriendelijke groet' weggooien en
+      // vervangen door een schone vaste afsluiting (voorkomt rauwe XML uit footer)
+      var groetIdx=body.search(/Met vriendelijke groet/i);
+      if(groetIdx>0)body=body.slice(0,groetIdx).trimEnd();
+      body+='\n\nMet vriendelijke groet,\n'+apo;
     }catch(e){body=_fallbackBriefTekst(naam,aanschrijfnaam,medRegels,datumNL);}
   } else {
     body=_fallbackBriefTekst(naam,aanschrijfnaam,medRegels,datumNL);
@@ -4995,12 +5039,21 @@ function maakBriefMailLink(p,datumNL){
 function _fallbackBriefTekst(naam,aanschrijfnaam,medRegels,datumNL){
   const aanhef=aanschrijfnaam&&aanschrijfnaam.trim()?aanschrijfnaam.trim():'heer/mevrouw '+naam;
   const apo=geselecteerdeApotheek?geselecteerdeApotheek.naam:'de apotheek';
-  return 'Geachte '+aanhef+',\n\n'
-    +'Hierbij bevestigen wij dat u bent opgenomen in de herhaalservice van '+apo+'.\n\n'
-    +'De volgende medicijnen worden voortaan via de herhaalservice verstrekt:\n'
+  return 'NIEUW! MEDICATIE AUTOMATISCH HERHALEN.\n\n'
+    +'Geachte '+aanhef+',\n\n'
+    +'Onlangs heeft u bij ons een bestelling geplaatst voor uw geneesmiddelen.\n\n'
+    +'In overleg met uw huisarts zullen wij voor onderstaande geneesmiddelen die u gebruikt gaan starten met automatisch herhalen.\n\n'
+    +'Dit houdt in dat onderstaande medicijnen 3-maandelijks automatisch door de apotheek voor u worden klaargezet. '
+    +'U hoeft voor deze medicijnen dus geen herhaalrecepten meer aan te vragen bij uw huisarts. '
+    +'Dit doet de apotheek voor u. Op deze manier zorgen wij ervoor dat alles automatisch geregeld wordt '
+    +'zodat u er geen omkijken meer naar heeft.\n\n'
+    +'Wij leveren uw medicijnen 3 weken voordat u ze nodig heeft.\n\n'
+    +'Hieronder de medicijnen die wij voor u automatisch gaan leveren:\n\n'
     +medRegels.join('\n')+'\n\n'
-    +'Datum: '+datumNL+'\n\n'
-    +'Met vriendelijke groet,\n'+apo;
+    +'Via e-mail of SMS krijgt u van ons bericht zodra uw medicijnen klaar staan.\n\n'
+    +'Heeft u vragen over het Automatisch Herhalen? Neem dan gerust contact met ons op.\n\n'
+    +'Met vriendelijke groet,\n'
+    +apo;
 }
 
 // ─── Mailto-link genereren voor gemiste receptuur bevestiging ────────────
@@ -5011,11 +5064,15 @@ function maakGemistMailLink(pid,medNaam){
   const aanhef=aanschrijfnaam?aanschrijfnaam:'heer/mevrouw';
   const apo=geselecteerdeApotheek?geselecteerdeApotheek.naam:'de apotheek';
   const medNetjes=formateerNaam(medNaam)||medNaam;
-  const onderwerp=encodeURIComponent('Opname herhaalservice \u2014 '+medNetjes);
+  const onderwerp=encodeURIComponent('Uitbreiding herhaalservice \u2014 '+medNetjes);
   const body=encodeURIComponent(
     'Geachte '+aanhef+',\n\n'
-    +'Hierbij bevestigen wij dat uw medicijn '+medNetjes+' voortaan via de herhaalservice van '+apo+' wordt verstrekt.\n\n'
-    +'U hoeft hier geen actie voor te ondernemen. Heeft u vragen, neem dan gerust contact op met de apotheek.\n\n'
+    +'Wij hebben uw medicijn '+medNetjes+' toegevoegd aan uw herhaalservice.\n\n'
+    +'Dit betekent dat dit medicijn voortaan automatisch door de apotheek voor u wordt klaargezet, '
+    +'samen met uw overige medicijnen die u al via de herhaalservice ontvangt. '
+    +'U hoeft hiervoor geen herhaalrecept meer aan te vragen bij uw huisarts.\n\n'
+    +'Wij leveren uw medicijnen 3 weken voordat u ze nodig heeft.\n\n'
+    +'Heeft u vragen? Neem dan gerust contact met ons op.\n\n'
     +'Met vriendelijke groet,\n'+apo
   );
   return 'mailto:'+encodeURIComponent(email)+'?subject='+onderwerp+'&body='+body;
